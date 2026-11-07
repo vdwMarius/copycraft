@@ -14,6 +14,8 @@ Primary performance validation device, as supplied by the creative director: Sam
 
 Approved: smaller cubes add visual appearance; decorative quarter-unit detail does not create individually editable simulation cells. Later building should support full, half, and quarter-block pieces with correct snapping and matching collision. Implement fractional building as a separately validated increment after basic block placement, rather than assuming visual mesh detail supplies editing behavior.
 
+Approved material controls: face grids 1×1, 4×4 (16 cells), 8×8 (64 cells), independent texture sizes 16×16, 64×64, 128×128. Raised detail is cosmetic and keeps whole-block collision.
+
 ## Increments
 
 | Job | Deliverable | Completion evidence |
@@ -21,6 +23,7 @@ Approved: smaller cubes add visual appearance; decorative quarter-unit detail do
 | 00 | Direction, roadmap, and job handoff | Documents committed and pushed |
 | 01 | Android foundation and profiling | Reproducible debug APK build, minimal terrain scene, touch movement/look, frame-time instrumentation; device installation reported separately |
 | 01c | Visual quarter-voxel experiment | Bounded native detail, shared meshes, control regressions and updated Android APK; new phone result pending |
+| 01d | Selectable material detail | Saved face-grid/texture-resolution settings, original color/height pack, bounded visual relief, Android APK |
 | 02 | Streamed voxel world | Seeded terrain, background generation/meshing, bounded queues and memory, selectable distance; traversal and boundary tests |
 | 03 | Interactive sandbox | Block selection, removal/placement, collision, local world saves; edits survive restart |
 | 03b | Fractional building pieces | Half/quarter pieces, snapping, orientation, collision and save/load tests |

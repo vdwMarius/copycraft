@@ -1,10 +1,19 @@
 extends Node3D
 
+const Pack = preload("res://scripts/material_pack.gd")
+const Settings = preload("res://scripts/material_settings.gd")
+
+var material_settings = Settings.new()
+var surface_pack: RefCounted
+var surface_material: ShaderMaterial
+var relief_layer: Node3D
+var _pack_cache: Dictionary = {}
 var terrain: Node3D
 var player: CharacterBody3D
 var hud: Control
 
 func _ready() -> void:
+	material_settings.load_from()
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
@@ -38,4 +47,27 @@ func _ready() -> void:
 	add_child(canvas)
 	canvas.add_child(hud)
 	hud.setup(player)
-	hud.set_world_stats({"status": "VISUAL VOXELS ¼ · BUILD GRID 1 BLOCK"})
+	hud.setup_material_settings(material_settings.grid, material_settings.resolution, material_settings.relief)
+	hud.material_settings_changed.connect(_apply_material_settings)
+	relief_layer = preload("res://scripts/surface_relief.gd").new()
+	add_child(relief_layer)
+	_apply_material_settings(material_settings.grid, material_settings.resolution, material_settings.relief, false)
+
+
+func _apply_material_settings(grid: int, resolution: int, relief: bool, persist: bool = true) -> void:
+	if grid not in Pack.GRIDS or resolution not in Pack.RESOLUTIONS:
+		return
+	material_settings.grid = grid
+	material_settings.resolution = resolution
+	material_settings.relief = relief
+	if not _pack_cache.has(resolution):
+		var pack := Pack.new()
+		pack.generate(resolution)
+		_pack_cache[resolution] = pack
+	surface_pack = _pack_cache[resolution]
+	surface_material = surface_pack.make_material(grid, relief)
+	terrain.apply_material(surface_material)
+	relief_layer.configure(surface_pack, grid, relief, surface_material, terrain, player)
+	hud.set_world_stats({"status": "%d×%d GRID · %d×%d TEX · RELIEF %s" % [grid,grid,resolution,resolution,"ON" if relief else "OFF"]})
+	if persist and material_settings.save_to() != OK:
+		push_warning("Material settings could not be saved; selection remains active for this session.")

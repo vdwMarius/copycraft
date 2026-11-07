@@ -1,37 +1,43 @@
 shader_type spatial;
 render_mode diffuse_burley, specular_disabled;
 
-// Quarter-block surface detail without subdividing the simulation or collision grid.
+uniform sampler2DArray color_layers : source_color, filter_nearest_mipmap, repeat_enable;
+uniform sampler2DArray height_layers : filter_nearest_mipmap, repeat_enable;
+uniform float grid_size = 4.0;
+uniform float texture_size = 64.0;
+uniform bool relief_enabled = true;
 varying vec3 world_position;
 varying vec3 world_normal;
-varying vec3 voxel_color;
+varying float material_index;
 
 void vertex() {
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	world_normal = normalize(MODEL_NORMAL_MATRIX * NORMAL);
-	voxel_color = COLOR.rgb;
-}
-
-float cell_hash(vec3 p) {
-	p = fract(p * vec3(0.1031, 0.11369, 0.13787));
-	p += dot(p, p.yzx + 19.19);
-	return fract((p.x + p.y) * p.z);
+	material_index = round(COLOR.r * 255.0);
 }
 
 void fragment() {
 	vec3 n = abs(world_normal);
-	vec3 grid = (world_position - world_normal * 0.001) * 4.0;
-	vec2 face = n.y > 0.5 ? grid.xz : (n.x > 0.5 ? grid.zy : grid.xy);
-	vec2 edge_distance = min(fract(face), 1.0 - fract(face));
+	vec2 uv = n.y > 0.5 ? world_position.xz : (n.x > 0.5 ? world_position.zy : world_position.xy);
+	float layer = clamp(round(material_index), 0.0, 5.0);
+	if (layer < 0.5 && n.y < 0.5) { layer = 1.0; }
+	vec3 color = texture(color_layers, vec3(uv, layer)).rgb;
+	vec2 face = uv * grid_size;
+	vec2 edge = min(fract(face), 1.0 - fract(face));
 	vec2 aa = max(fwidth(face), vec2(0.001));
-	vec2 lines = 1.0 - smoothstep(vec2(0.018), vec2(0.018) + aa, edge_distance);
-	float near_detail = 1.0 - smoothstep(14.0, 32.0, distance(CAMERA_POSITION_WORLD, world_position));
-	float tint = mix(0.94, 1.05, cell_hash(floor(grid)));
-	float seams = 1.0 - 0.08 * max(lines.x, lines.y);
-	vec3 base = voxel_color;
-	if (!OUTPUT_IS_SRGB) {
-		base = pow(base, vec3(2.2));
+	vec2 lines = 1.0 - smoothstep(vec2(0.015), vec2(0.015) + aa, edge);
+	float near_detail = 1.0 - smoothstep(10.0, 28.0, distance(CAMERA_POSITION_WORLD, world_position));
+	float seams = abs(layer - 2.0) < 0.5 ? lines.x : max(lines.x, lines.y);
+	ALBEDO = color * (1.0 - 0.075 * seams * near_detail);
+	if (relief_enabled) {
+		float step_uv = 1.0 / texture_size;
+		float h0 = texture(height_layers, vec3(uv, layer)).r;
+		float hx = texture(height_layers, vec3(uv + vec2(step_uv, 0.0), layer)).r - h0;
+		float hy = texture(height_layers, vec3(uv + vec2(0.0, step_uv), layer)).r - h0;
+		vec3 u = n.y > 0.5 ? vec3(1,0,0) : (n.x > 0.5 ? vec3(0,0,1) : vec3(1,0,0));
+		vec3 v = n.y > 0.5 ? vec3(0,0,1) : vec3(0,1,0);
+		vec3 slope = (u * hx + v * hy) * 0.8 * near_detail;
+		NORMAL = normalize(NORMAL - mat3(VIEW_MATRIX) * slope);
 	}
-	ALBEDO = base * mix(1.0, tint * seams, near_detail);
 	ROUGHNESS = 0.96;
 }

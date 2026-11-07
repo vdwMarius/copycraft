@@ -1,5 +1,6 @@
 extends Node3D
 ## Cosmetic quarter-block geometry, shared across a bounded finite grove.
+const Pack = preload("res://scripts/material_pack.gd")
 const VOXEL_SCALE := 0.25
 const VISIBILITY_DISTANCE := 44.0
 const TREE_POINTS := [Vector2i(-13, -12), Vector2i(13, -18), Vector2i(20, 2), Vector2i(-20, 10), Vector2i(-6, -27)]
@@ -74,12 +75,12 @@ func _build_mesh(buffer: VoxelBuffer) -> Mesh:
 
 func _tree_mesh(variant: int) -> Mesh:
 	var buffer := _buffer(Vector3i(28, 36, 28))
-	var bark := Color("79583e") if variant == 0 else Color("70543f")
+	var bark := Pack.marker(Pack.BARK)
 	for y in range(20):
 		for z in range(12, 16):
 			for x in range(12, 16):
-				_voxel(buffer, x, y, z, bark.darkened(0.12) if x == 12 else bark)
-	var greens := [Color("365c48"), Color("477760"), Color("56846d")] if variant == 0 else [Color("315b53"), Color("40796b"), Color("528879")]
+				_voxel(buffer, x, y, z, bark)
+	var greens := [Pack.marker(Pack.LEAVES), Pack.marker(Pack.LEAVES), Pack.marker(Pack.LEAVES)]
 	# Overlapping stepped boughs form a complete crown with quarter-unit tips.
 	for tier in range(6):
 		var base_y := 12 + tier * 3
@@ -102,11 +103,11 @@ func _ground_mesh(variant: int) -> Mesh:
 		for z in range(1, 7):
 			for x in range(1, 7):
 				if abs(x - 3) + abs(z - 4) <= 4 and not (x > 4 and z < 3):
-					_voxel(buffer, x, 0, z, Color("6a8052") if z < 4 else Color("5c734c"))
+					_voxel(buffer, x, 0, z, Pack.marker(Pack.GRASS))
 	else:
 		for point in [Vector2i(1, 2), Vector2i(4, 4), Vector2i(5, 1)]:
-			_voxel(buffer, point.x, 0, point.y, Color("999286"))
-			_voxel(buffer, point.x + 1, 0, point.y, Color("8d897e"))
+			_voxel(buffer, point.x, 0, point.y, Pack.marker(Pack.STONE))
+			_voxel(buffer, point.x + 1, 0, point.y, Pack.marker(Pack.STONE))
 	return _build_mesh(buffer)
 
 

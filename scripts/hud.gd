@@ -1,11 +1,16 @@
 extends Control
 ## Resolution-independent drawn HUD; touch contacts have exclusive ownership.
+signal material_settings_changed(grid: int, resolution: int, relief: bool)
 
 const INK := Color(0.91, 0.96, 0.94)
 const MUTED := Color(0.61, 0.73, 0.73)
 const MINT := Color(0.57, 0.94, 0.73)
 const PANEL := Color(0.035, 0.075, 0.085, 0.84)
 const JOYSTICK_RADIUS := 75.0
+const FACE_GRIDS := [1, 4, 8]
+const TEXTURE_RESOLUTIONS := [16, 64, 128]
+const GRID_LABELS := ["1 × 1", "4 × 4 (16)", "8 × 8 (64)"]
+const RESOLUTION_LABELS := ["16 × 16", "64 × 64", "128 × 128"]
 const BLOCK_COLORS := [Color("75b975"), Color("ba9570"), Color("82989a"), Color("dabd80"), Color("8bbcc1")]
 
 var player: CharacterBody3D
@@ -30,6 +35,114 @@ var _backend := ""
 var _world_stats: Dictionary = {}
 var _focused := true
 var _safe_rect := Rect2()
+var _materials_open := false
+var _material_grid := 4
+var _material_resolution := 64
+var _material_relief := true
+var _modal_focus := 0
+var _mouse_mode_before := Input.MOUSE_MODE_VISIBLE
+
+
+func setup_material_settings(grid: int, resolution: int, relief: bool) -> void:
+	_material_grid = grid if grid in FACE_GRIDS else 4
+	_material_resolution = resolution if resolution in TEXTURE_RESOLUTIONS else 64
+	_material_relief = relief
+	queue_redraw()
+
+
+func _materials_button_rect() -> Rect2:
+	return Rect2(_safe_rect.position + Vector2(24, 126) * _scale, Vector2(148, 48) * _scale)
+
+
+func _materials_panel_rect() -> Rect2:
+	var panel_size := Vector2(640, 444) * _scale
+	return Rect2(_safe_rect.get_center() - panel_size * 0.5, panel_size)
+
+
+func _material_option_rect(index: int) -> Rect2:
+	var at := Vector2.ZERO
+	var dimensions := Vector2(180, 52)
+	if index < 3:
+		at = Vector2(28 + index * 188, 122)
+	elif index < 6:
+		at = Vector2(28 + (index - 3) * 188, 224)
+	elif index < 8:
+		at = Vector2(28 + (index - 6) * 188, 326)
+	else:
+		at = Vector2(528, 20)
+		dimensions = Vector2(88, 40)
+	return Rect2(_materials_panel_rect().position + at * _scale, dimensions * _scale)
+
+
+func _set_materials_open(open: bool) -> void:
+	if _materials_open == open:
+		return
+	_materials_open = open
+	_release_touches()
+	player.clear_input()
+	if player.has_method("set_controls_enabled"):
+		player.set_controls_enabled(not open)
+	if open:
+		_mouse_mode_before = Input.mouse_mode
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		_modal_focus = FACE_GRIDS.find(_material_grid)
+	elif _focused:
+		Input.mouse_mode = _mouse_mode_before
+	queue_redraw()
+
+
+func _activate_material_option(index: int) -> void:
+	if index == 8:
+		_set_materials_open(false)
+		return
+	var old := Vector3i(_material_grid, _material_resolution, int(_material_relief))
+	if index < 3:
+		_material_grid = FACE_GRIDS[index]
+	elif index < 6:
+		_material_resolution = TEXTURE_RESOLUTIONS[index - 3]
+	else:
+		_material_relief = index == 7
+	_modal_focus = index
+	if old != Vector3i(_material_grid, _material_resolution, int(_material_relief)):
+		material_settings_changed.emit(_material_grid, _material_resolution, _material_relief)
+	queue_redraw()
+
+
+func _handle_materials_input(event: InputEvent) -> bool:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.physical_keycode == KEY_M or (_materials_open and event.physical_keycode == KEY_ESCAPE):
+			_set_materials_open(not _materials_open)
+			return true
+	var pointer_pressed := false
+	var pointer := Vector2.ZERO
+	if event is InputEventScreenTouch:
+		pointer_pressed = event.pressed and not event.canceled
+		pointer = event.position
+	elif event is InputEventMouseButton:
+		pointer_pressed = event.pressed and event.button_index == MOUSE_BUTTON_LEFT
+		pointer = event.position
+	if not _materials_open:
+		if pointer_pressed and _materials_button_rect().has_point(pointer):
+			_set_materials_open(true)
+			return true
+		return false
+	if pointer_pressed:
+		for index in range(9):
+			if _material_option_rect(index).has_point(pointer):
+				_activate_material_option(index)
+				break
+	elif event is InputEventKey and event.pressed:
+		if event.physical_keycode == KEY_TAB:
+			_modal_focus = posmod(_modal_focus + (-1 if event.shift_pressed else 1), 9)
+		elif event.physical_keycode == KEY_RIGHT or event.physical_keycode == KEY_DOWN:
+			_modal_focus = (_modal_focus + 1) % 9
+		elif event.physical_keycode == KEY_LEFT or event.physical_keycode == KEY_UP:
+			_modal_focus = posmod(_modal_focus - 1, 9)
+		elif not event.echo and event.physical_keycode in [KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]:
+			_activate_material_option(_modal_focus)
+		queue_redraw()
+	# Every input event is reserved while the modal is open, including blank space.
+	return true
 
 
 func setup(explorer: CharacterBody3D) -> void:
@@ -91,6 +204,9 @@ func _notification(what: int) -> void:
 
 func _input(event: InputEvent) -> void:
 	if not _focused or not is_instance_valid(player):
+		return
+	if _handle_materials_input(event):
+		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventScreenTouch:
 		if not event.pressed or event.canceled:
@@ -183,6 +299,8 @@ func _draw() -> void:
 	_text(origin + Vector2(58, 53) * s, "COPYCRAFT", 22)
 	_text(origin + Vector2(42, 80) * s, "FIRST LIGHT / ANDROID FOUNDATION", 10, MUTED)
 	_text(origin + Vector2(42, 99) * s, "FIELD TEST  /  01", 11, MINT)
+	_panel(_materials_button_rect(), PANEL, MINT)
+	_text(_materials_button_rect().position + Vector2(24, 30) * s, "Materials", 18)
 	var perf_x := _safe_rect.end.x - 334 * s
 	var top := origin.y
 	_panel(Rect2(perf_x, top + 24 * s, 310 * s, 151 * s))
@@ -222,3 +340,40 @@ func _draw() -> void:
 	_text(_jump_center + Vector2(-17, 77) * s, "JUMP", 11, MUTED)
 	if not DisplayServer.is_touchscreen_available():
 		_text(Vector2(_safe_rect.get_center().x - 210 * s, top + 33 * s), "WASD  MOVE     MOUSE  LOOK     SPACE  JUMP     ESC  CURSOR", 10, Color(0.9, 0.97, 0.94, 0.8))
+	if _materials_open:
+		_draw_materials_panel()
+
+
+func _draw_materials_panel() -> void:
+	var s := _scale
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0.015, 0.03, 0.035, 0.76))
+	var panel := _materials_panel_rect()
+	_panel(panel, Color(0.045, 0.09, 0.10, 0.99), Color(0.4, 0.65, 0.56))
+	var at := panel.position
+	_text(at + Vector2(28, 45) * s, "Materials", 28)
+	_text(at + Vector2(28, 76) * s, "Changes appear immediately.", 15, MUTED)
+	_text(at + Vector2(28, 108) * s, "Surface grid", 18)
+	_text(at + Vector2(28, 198) * s, "Texture resolution", 18)
+	_text(at + Vector2(28, 310) * s, "Raised detail", 18)
+	_text(at + Vector2(28, 414) * s, "Visual detail only. Building blocks keep their size.", 14, MUTED)
+	for index in range(9):
+		var selected := false
+		var label := "Close"
+		if index < 3:
+			selected = FACE_GRIDS[index] == _material_grid
+			label = GRID_LABELS[index]
+		elif index < 6:
+			selected = TEXTURE_RESOLUTIONS[index - 3] == _material_resolution
+			label = RESOLUTION_LABELS[index - 3]
+		elif index < 8:
+			selected = _material_relief == (index == 7)
+			label = "Off" if index == 6 else "On"
+		var rect := _material_option_rect(index)
+		var fill := Color(0.17, 0.32, 0.27) if selected else Color(0.075, 0.14, 0.15)
+		var border := MINT if selected or index == _modal_focus else Color(0.29, 0.4, 0.4)
+		_panel(rect, fill, border)
+		if index == _modal_focus:
+			draw_line(rect.position + Vector2(12, rect.size.y / s - 5) * s, rect.end - Vector2(12, 5) * s, INK, 2 * s, true)
+		var font_size := 16 if index == 8 else 18
+		var text_width := ThemeDB.fallback_font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, int(font_size * s)).x
+		_text(Vector2(rect.get_center().x - text_width * 0.5, rect.get_center().y + 6 * s), label, font_size, INK)

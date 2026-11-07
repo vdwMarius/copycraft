@@ -13,6 +13,7 @@ var _pitch := -0.08
 var _jump_buffer := 0.0
 var _floor_grace := 0.0
 var _focused := true
+var controls_enabled := true
 
 
 func _ready() -> void:
@@ -41,7 +42,7 @@ func _ready() -> void:
 
 
 func look_delta(pixel_delta: Vector2) -> void:
-	if not _focused or not is_instance_valid(camera):
+	if not _focused or not controls_enabled or not is_instance_valid(camera):
 		return
 	rotate_y(-pixel_delta.x * look_sensitivity)
 	_pitch = clampf(_pitch - pixel_delta.y * look_sensitivity, -1.48, 1.48)
@@ -49,7 +50,7 @@ func look_delta(pixel_delta: Vector2) -> void:
 
 
 func request_jump() -> void:
-	if _focused:
+	if _focused and controls_enabled:
 		_jump_buffer = 0.14
 
 
@@ -70,7 +71,7 @@ func _notification(what: int) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not _focused:
+	if not _focused or not controls_enabled:
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.physical_keycode == KEY_ESCAPE:
@@ -91,7 +92,7 @@ func _physics_process(delta: float) -> void:
 	_jump_buffer = maxf(0.0, _jump_buffer - delta)
 	_floor_grace = 0.12 if is_on_floor() else maxf(0.0, _floor_grace - delta)
 	var direction := move_input
-	if _focused:
+	if _focused and controls_enabled:
 		direction += Vector2(
 			float(Input.is_physical_key_pressed(KEY_D)) - float(Input.is_physical_key_pressed(KEY_A)),
 			float(Input.is_physical_key_pressed(KEY_S)) - float(Input.is_physical_key_pressed(KEY_W)))
@@ -100,7 +101,7 @@ func _physics_process(delta: float) -> void:
 	direction = direction.limit_length(1.0)
 	var world_direction := transform.basis * Vector3(direction.x, 0.0, direction.y)
 	var speed := walk_speed
-	if _focused and Input.is_physical_key_pressed(KEY_SHIFT):
+	if _focused and controls_enabled and Input.is_physical_key_pressed(KEY_SHIFT):
 		speed *= 1.5
 	velocity.x = move_toward(velocity.x, world_direction.x * speed, 32.0 * delta)
 	velocity.z = move_toward(velocity.z, world_direction.z * speed, 32.0 * delta)
@@ -119,7 +120,7 @@ func _physics_process(delta: float) -> void:
 
 func _can_auto_jump(direction: Vector3) -> bool:
 	# Sweep the player's capsule, rather than a ray that could miss shoulders.
-	if not _focused or direction.length_squared() < 0.04:
+	if not _focused or not controls_enabled or direction.length_squared() < 0.04:
 		return false
 	var forward := direction.normalized() * 0.6
 	var obstacle := KinematicCollision3D.new()
@@ -145,3 +146,8 @@ func _can_auto_jump(direction: Vector3) -> bool:
 		return false
 	var rise := AUTO_JUMP_HEIGHT + landing.get_travel().y
 	return rise > 0.15 and rise <= AUTO_JUMP_HEIGHT and landing.get_normal().y > 0.7
+
+
+func set_controls_enabled(enabled: bool) -> void:
+	controls_enabled = enabled
+	clear_input()

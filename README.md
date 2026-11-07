@@ -40,3 +40,9 @@ Controls regression checks: `./tools/godot.sh --headless --script res://tests/au
 The current experiment adds quarter-block surface shading and native quarter-unit tree/ground meshes. It keeps full-block terrain/collision; tiny decorative cubes are not individually editable. Half- and quarter-block building pieces are planned separately. Details fade or cull at distance and shared meshes keep the number of scene objects bounded. See [representation and validation](docs/VALIDATION-01c.md).
 
 Run `./tools/godot.sh --headless --script res://tests/micro_details.gd` for native geometry/reuse/budget checks. New visuals require a fresh device FPS check; the 120 fps user report applies to the preceding versions.
+
+## Materials (0.1.3)
+
+Open **Materials** on screen, or press **M** on desktop. Choose surface grid **1×1 / 4×4 (16 cells) / 8×8 (64 cells)**, independent texture resolution **16×16 / 64×64 / 128×128**, and Raised detail **Off / On**. Changes appear immediately and survive restart. The built-in original pack covers grass, soil, bark, stone, sand, and leaves. Raised grass/soil/bark detail is nearby visual geometry; collision and building blocks stay coarse. Texture resolution does not create extra simulation cubes.
+
+`python tools/checks.py` runs all eight regression suites. On a display, `./tools/godot.sh --script res://tests/material_capture.gd` saves comparative captures under build/. See [material validation and limits](docs/VALIDATION-01d.md). This APK requires a fresh phone performance check.
