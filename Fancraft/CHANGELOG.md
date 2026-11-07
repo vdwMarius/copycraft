@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.7.0: S1, the smooth world (new direction)
+
+Approved direction: smooth diggable terrain plus survival, crafting and exploration (see
+docs/PLAN-v2-smooth-survival.md).
+- **New terrain engine.** Smooth terrain from Voxel Tools (MIT, native C++), with level of
+  detail, native threaded meshing and collision, and about 3× longer view distance.
+  Visible triangles in the cloud test fell from about 2.6 M (blocky 0.6) to 0.27 M.
+- **Digging and raising:**
+  - hold on the ground to dig (continuous pulses);
+  - select the new **DIG** terrain tool (first hotbar slot) and tap to raise dirt.
+  Dug holes show dirt, then stone, deeper down.
+- **Stylised terrain shader:** painted triplanar textures. Grass on flats, dirt and rock on
+  slopes, sand at shores, snow on peaks. Same cel lighting as the pieces.
+- **Water** is now a single cheap animated plane.
+- **Building:** pieces still build on top of anything with tap to place and hold to break.
+  Trees, boulders and crystals are breakable pieces.
+- Spawning waits for terrain collision. Input regression test updated for dig and raise.
+
 ## 0.6.1
 - The cracks overlay now fits the solid part of the piece being broken (for example a
   quarter-height terrace or a slab) instead of a full block-sized box.

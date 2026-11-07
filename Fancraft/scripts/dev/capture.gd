@@ -7,7 +7,7 @@ func _ready() -> void:
 	var root := get_tree().root
 	var process_frame := get_tree().process_frame
 	var t := 0
-	while not main.player.controls_enabled and t < 3000:
+	while not main.player.controls_enabled and t < 100000:
 		await process_frame
 		t += 1
 		if t % 100 == 0: print("frame ", t, " ", main.world.stats, " bodies ", main.world.bodies.size())

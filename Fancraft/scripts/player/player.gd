@@ -12,6 +12,7 @@ const STEP_HEIGHT := 0.55
 const EYE_HEIGHT := 1.6
 
 var world: VoxelWorld
+var terrain: SmoothTerrain
 var camera: Camera3D
 var move_input := Vector2.ZERO      # x = strafe, y = forward (-1..1)
 var jump_held := false
@@ -88,7 +89,7 @@ func _physics_process(delta: float) -> void:
 	var running := sprint or Input.is_physical_key_pressed(KEY_SHIFT)
 	var basis_flat := Basis(Vector3.UP, rotation.y)
 	var wish := basis_flat * Vector3(input.x, 0, -input.y)
-	_in_water = world != null and Blocks.DEFS.get(world.get_block_at(global_position + Vector3(0, 0.9, 0)), [""])[0] == "water"
+	_in_water = global_position.y + 0.9 < TerrainShape.WATER_LEVEL
 
 	if flying:
 		var speed := FLY_SPEED * (1.6 if running else 1.0)
@@ -121,8 +122,8 @@ func _physics_process(delta: float) -> void:
 			if _can_rise(1.1, horiz.normalized() * 0.4):
 				velocity.y = JUMP_SPEED * 0.92
 	_settle_camera(delta)
-	if global_position.y < -20.0 and world:
-		global_position.y = world.surface_height(global_position.x, global_position.z) + 3.0
+	if global_position.y < -20.0 and terrain:
+		global_position.y = terrain.height_at(global_position.x, global_position.z) + 3.0
 		velocity = Vector3.ZERO
 
 

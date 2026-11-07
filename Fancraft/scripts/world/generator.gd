@@ -7,7 +7,7 @@ extends RefCounted
 ## 0.25-block terraces instead of whole-block stairs.
 
 const WATER_LEVEL := 30
-const WORLD_CHUNKS_Y := 6           # 96 blocks tall
+const WORLD_CHUNKS_Y := 8           # 128 blocks tall
 const SNOW_LINE := 62
 
 const GRASS := 1
@@ -24,6 +24,9 @@ const MOSSY := 15
 const COBBLE := 4
 
 var seed_value := 1337
+## When set, the ground itself is smooth Voxel Tools terrain: this generator only
+## places decorations (trees, boulders, crystals) on top of it, as editable pieces.
+var smooth_shape: TerrainShape = null
 var _continent := FastNoiseLite.new()
 var _hills := FastNoiseLite.new()
 var _detail := FastNoiseLite.new()
@@ -48,6 +51,8 @@ func _init(s := 1337) -> void:
 
 ## Surface height in blocks (float) at world column (x, z).
 func height_at(x: float, z: float) -> float:
+	if smooth_shape:
+		return smooth_shape.height_at(x, z)
 	var c := _continent.get_noise_2d(x, z)          # -1..1
 	var h := _hills.get_noise_2d(x, z)
 	var r := _ridge.get_noise_2d(x, z)
@@ -82,6 +87,10 @@ func generate(coord: Vector3i) -> Chunk:
 		for x in range(-2, 18):
 			heights[(x + 2) + (z + 2) * 20] = height_at(ox + x, oz + z)
 	var partial := {}  # cell index -> [fill_quarters, material]
+	if smooth_shape:
+		_decorate(chunk, heights)
+		chunk.recount()
+		return chunk
 	for z in 16:
 		for x in 16:
 			var hf := heights[(x + 2) + (z + 2) * 20]
@@ -158,7 +167,7 @@ func _decorate(chunk: Chunk, heights: PackedFloat32Array) -> void:
 			var top := int(floor(hf))
 			if top <= WATER_LEVEL + 1 or top >= SNOW_LINE - 2:
 				continue
-			if r < 0.011:
+			if r < 0.008:
 				_tree(chunk, x, top - oy, z, wx, wz)
 			elif r < 0.016 and x >= 1 and x < 15 and z >= 1 and z < 15:
 				_boulder(chunk, x, int(floor(hf * 4.0)) - oy * 4, z, wx, wz)
@@ -187,7 +196,7 @@ func _tree(chunk: Chunk, x: int, base_y: int, z: int, wx: int, wz: int) -> void:
 		return
 	if kind < 0.45:
 		var h := 7 + int(rand01(wx, 9, wz, seed_value) * 4.0)
-		for i in h:
+		for i in h - 3:   # trunk stays inside the top tiers
 			_set_block_if_air(chunk, x, base_y + i, z, LOG, true)
 		# Stacked shrinking tiers make the cone.
 		var tiers := 4

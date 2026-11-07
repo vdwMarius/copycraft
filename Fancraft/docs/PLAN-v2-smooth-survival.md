@@ -1,6 +1,6 @@
 # Fancraft v2 proposal: smooth voxel survival and crafting
 
-Status: **proposed, awaiting approval** (see "Decisions needed").
+Status: **approved**. Voxel Tools adopted and piece building kept. S1 is built as 0.7.0, with the phone test pending.
 
 ## Why change direction
 
@@ -60,7 +60,19 @@ this repository.
 | S8 | Creatures and exploration | Passive animals, a few hostiles at night, points of interest |
 | S9 | Performance and size | Profiling on device, LOD tuning, shader pre-warm, stripped export templates |
 
-## Decisions needed
+## Decisions (user, 0.7.0)
 
-- Approve using the Voxel Tools native extension (third-party compiled code in the app).
-- Confirm that piece building stays alongside terrain sculpting.
+- Voxel Tools native extension: approved.
+- Piece building stays alongside terrain sculpting: approved.
+
+## S1 notes (0.7.0)
+
+- The terrain shape lives in `scripts/terrain/terrain_shape.gd`. It is compiled into a
+  native `VoxelGeneratorGraph` and mirrored in GDScript for spawn and tree placement; a
+  test checks the two agree. The graph expression parser reads `name * (` as a function
+  call, so parenthesised terms are written first.
+- The smooth terrain shader is `shaders/terrain.gdshader`: Transvoxel seam stitching,
+  per-voxel texture indices, triplanar painted textures and cel lighting. Water is a
+  single cheap plane.
+- Trees, boulders and crystals are generated into the structure layer, so they can be
+  broken like any piece. That layer is still GDScript-meshed and moves to instancing in S6.

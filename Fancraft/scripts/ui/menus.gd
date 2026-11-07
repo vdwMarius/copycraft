@@ -235,10 +235,10 @@ func open_blocks() -> void:
 	grid.columns = 6
 	grid.add_theme_constant_override("h_separation", 10)
 	grid.add_theme_constant_override("v_separation", 10)
-	for id in Blocks.PALETTE:
+	for id in [Builder.TERRAIN_TOOL] + Array(Blocks.PALETTE):
 		var btn := Button.new()
 		btn.custom_minimum_size = Vector2(150, 120)
-		btn.text = Blocks.names[id]
+		btn.text = "Terrain tool" if id == Builder.TERRAIN_TOOL else Blocks.names[id]
 		btn.icon = hud.block_icon(id) if hud else null
 		btn.expand_icon = false
 		btn.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP

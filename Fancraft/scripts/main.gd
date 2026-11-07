@@ -7,6 +7,7 @@ var env: Environment
 var sky_mat: ShaderMaterial
 var sun: DirectionalLight3D
 var world: VoxelWorld
+var terrain: SmoothTerrain
 var player: Player
 var builder: Builder
 var hud: Hud
@@ -31,14 +32,22 @@ func _ready() -> void:
 	player = Player.new()
 	player.controls_enabled = false
 	add_child(player)
-	player.position = _find_spawn(TerrainGenerator.new(SEED))
+	terrain = SmoothTerrain.new()
+	terrain.name = "Terrain"
+	add_child(terrain)
+	terrain.setup(SEED, player)
+	terrain.set_sun(sun.global_transform.basis.z)
+	player.position = _find_spawn(terrain.shape)
+	# Structure layer: player-built pieces plus trees / boulders / crystals as pieces.
 	world = VoxelWorld.new()
-	world.name = "World"
-	world.setup(SEED, player, block_mats.materials)
+	world.name = "Structures"
+	world.setup(SEED, player, block_mats.materials, terrain.shape)
 	add_child(world)
 	player.world = world
+	player.terrain = terrain
 	builder = Builder.new()
 	builder.world = world
+	builder.terrain = terrain
 	builder.player = player
 	add_child(builder)
 	var layer := CanvasLayer.new()
@@ -58,7 +67,6 @@ func _ready() -> void:
 	_loading.add_theme_font_size_override("font_size", 34)
 	_loading.set_anchors_preset(Control.PRESET_CENTER)
 	layer.add_child(_loading)
-	world.spawn_ready.connect(_on_spawn)
 	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
 	Settings.changed.connect(_apply_setting)
 	for k in ["fps_target", "render_scale", "msaa", "shadows", "glow", "render_distance"]:
@@ -72,15 +80,15 @@ func _ready() -> void:
 	get_tree().root.focus_exited.connect(func(): player.move_input = Vector2.ZERO)
 
 
-## Spiral outwards for a dry, fairly flat grass column.
-func _find_spawn(gen: TerrainGenerator) -> Vector3:
+## Spiral outwards for a dry, fairly flat spot.
+func _find_spawn(gen: TerrainShape) -> Vector3:
 	for ring in range(0, 40):
 		for i in maxi(ring * 8, 1):
 			var a := TAU * i / maxf(ring * 8, 1)
 			var x := 8.5 + cos(a) * ring * 6.0
 			var z := 8.5 + sin(a) * ring * 6.0
 			var h := gen.height_at(x, z)
-			if h < TerrainGenerator.WATER_LEVEL + 3 or h > 55:
+			if h < TerrainShape.WATER_LEVEL + 3 or h > 55:
 				continue
 			var slope := 0.0
 			for d in [Vector2(3, 0), Vector2(-3, 0), Vector2(0, 3), Vector2(0, -3)]:
@@ -92,9 +100,10 @@ func _find_spawn(gen: TerrainGenerator) -> Vector3:
 
 func _on_spawn() -> void:
 	var p := player.position
-	player.position.y = world.surface_height(p.x, p.z) + 1.2
+	player.position.y = terrain.height_at(p.x, p.z) + 1.5
 	player.controls_enabled = true
 	_loading.queue_free()
+	_loading = null
 	if not DisplayServer.is_touchscreen_available() and DisplayServer.get_name() != "headless":
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -230,6 +239,8 @@ func _auto_resolution(delta: float) -> void:
 
 
 func _process(delta: float) -> void:
+	if not player.controls_enabled and _loading and terrain.has_ground_below(player.position, [player.get_rid()]):
+		_on_spawn()
 	_auto_resolution(delta)
 	if not Settings.get_value("show_stats"):
 		return

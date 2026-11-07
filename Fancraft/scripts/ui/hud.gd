@@ -15,7 +15,7 @@ const BREAK_COOLDOWN := 0.3     # pause after each broken block before the next 
 var player: Player
 var builder: Builder
 var world: VoxelWorld
-var hotbar: PackedInt32Array = [7, 3, 4, 11, 16, 6, 9, 14]
+var hotbar: PackedInt32Array = [Builder.TERRAIN_TOOL, 7, 3, 4, 11, 16, 6, 9]
 var selected_slot := 0
 var stats_text := ""
 var menu_open := false
@@ -97,6 +97,8 @@ func _rebuild_icons() -> void:
 
 
 func block_icon(id: int) -> Texture2D:
+	if id == Builder.TERRAIN_TOOL:
+		return _icons.get(2)   # dirt
 	return _icons.get(id)
 
 
@@ -199,7 +201,8 @@ func _update_hold(delta: float) -> void:
 		_break_key = AABB()
 		if builder.break_at_screen(_look_last):
 			_broke_this_touch = true
-			_cooldown = BREAK_COOLDOWN
+			# Pieces pause between breaks (Minecraft); digging ground keeps flowing.
+			_cooldown = BREAK_COOLDOWN if info.kind == "piece" else 0.0
 			Input.vibrate_handheld(18)
 	queue_redraw()
 
@@ -335,7 +338,7 @@ func _select_slot(i: int) -> void:
 		return
 	selected_slot = i
 	builder.block_id = hotbar[i]
-	toast(Blocks.names[hotbar[i]])
+	toast("Terrain tool" if hotbar[i] == Builder.TERRAIN_TOOL else Blocks.names[hotbar[i]])
 	queue_redraw()
 
 
@@ -428,12 +431,14 @@ func _draw() -> void:
 			var tex := block_icon(hotbar[i])
 			if tex:
 				draw_texture_rect(tex, rc.grow(-7), false)
+			if hotbar[i] == Builder.TERRAIN_TOOL:
+				_text_centered("DIG", rc.get_center(), 18)
 		else:
 			_text_centered("ALL", rc.get_center(), 20)
 		var sel := i == selected_slot
 		draw_rect(rc, Color(1, 0.9, 0.5, 1) if sel else Color(1, 1, 1, 0.35), false, 4.0 if sel else 2.0)
 	# Piece / mode readout
-	var mode_txt := "Tap: place %s %s   ·   Hold: break" % [Blocks.names[builder.block_id], Pieces.LIST[builder.piece][0].to_lower()]
+	var mode_txt := "Tap: raise ground   ·   Hold: dig" if builder.block_id == Builder.TERRAIN_TOOL else "Tap: place %s %s   ·   Hold: break / dig" % [Blocks.names[builder.block_id], Pieces.LIST[builder.piece][0].to_lower()]
 	_text_centered(mode_txt, Vector2(center.x, _hotbar_rects[0].position.y - 22), 20)
 	if Settings.get_value("show_stats"):
 		draw_multiline_string_outline(_font, _safe.position + Vector2(16, 30), stats_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, -1, 4, Color(0, 0, 0, 0.6))

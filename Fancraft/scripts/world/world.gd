@@ -47,8 +47,9 @@ var _spawned := false
 var _quitting := false
 
 
-func setup(seed_value: int, focus_node: Node3D, mats: Array[ShaderMaterial]) -> void:
+func setup(seed_value: int, focus_node: Node3D, mats: Array[ShaderMaterial], smooth: TerrainShape = null) -> void:
 	generator = TerrainGenerator.new(seed_value)
+	generator.smooth_shape = smooth
 	focus = focus_node
 	materials = mats
 	_tables = Mesher.tables_from(Blocks)
@@ -288,7 +289,7 @@ func _upload() -> void:
 		if r == null:
 			break
 		_apply_mesh(r)
-	if not _spawned and focus:
+	if not _spawned and focus and generator.smooth_shape == null:
 		var c := column_of(focus.global_position)
 		var p := focus.global_position
 		var sy := floori(surface_height(p.x, p.z) / CS)
@@ -411,6 +412,7 @@ func _build_body(c: Vector3i) -> void:
 		return
 	if body == null:
 		body = StaticBody3D.new()
+		body.set_meta("structure", true)
 		body.position = Vector3(c) * CS
 		var cs := CollisionShape3D.new()
 		body.add_child(cs)

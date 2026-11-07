@@ -5,10 +5,10 @@ extends Node
 func _ready() -> void:
 	var main: Node = get_parent()
 	var tree := get_tree()
-	var t := 0
-	while not main.player.controls_enabled and t < 3000:
+	var t0_spawn := Time.get_ticks_msec()
+	while not main.player.controls_enabled and Time.get_ticks_msec() - t0_spawn < 60000:
 		await tree.process_frame
-		t += 1
+	print("spawned in ", Time.get_ticks_msec() - t0_spawn, " ms, controls=", main.player.controls_enabled)
 	for i in 30:
 		await tree.physics_frame
 	var p: Player = main.player
@@ -96,7 +96,7 @@ func _touch(index: int, pos: Vector2, pressed: bool) -> void:
 
 
 func _edits(w: VoxelWorld) -> int:
-	var n := 0
+	var n: int = get_parent().terrain.edit_count
 	for k in w.versions:
 		n += w.versions[k]
 	return n

@@ -5,3 +5,4 @@ build/
 *.keystore
 *.import
 !releases/*.apk
+addons/zylann.voxel/bin/

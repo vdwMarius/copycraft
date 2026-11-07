@@ -6,8 +6,14 @@ extends Node3D
 signal changed
 
 const REACH := 9.0
+## Hotbar id of the terrain tool: tap raises ground, hold digs.
+const TERRAIN_TOOL := -2
+const DIG_RADIUS := 1.25
+const RAISE_RADIUS := 1.15
+const DIG_TIME := 0.22            # seconds per dig pulse while holding
 
 var world: VoxelWorld
+var terrain: SmoothTerrain
 var player: Player
 var block_id := 7
 var piece := 0
@@ -79,13 +85,15 @@ func raycast(origin: Vector3, dir: Vector3) -> Dictionary:
 	var n: Vector3 = r.normal
 	# Snap the normal to the dominant axis (trimesh normals are exact, but be safe).
 	var a := n.abs()
+	var raw: Vector3 = r.normal
 	if a.x >= a.y and a.x >= a.z:
 		n = Vector3(signf(n.x), 0, 0)
 	elif a.y >= a.z:
 		n = Vector3(0, signf(n.y), 0)
 	else:
 		n = Vector3(0, 0, signf(n.z))
-	return {"hit": r.position, "normal": n}
+	var on_terrain := terrain != null and terrain.owns_collider(r.collider)
+	return {"hit": r.position, "normal": n, "raw_normal": raw, "terrain": on_terrain}
 
 
 func current_box(target: Dictionary) -> AABB:
@@ -100,6 +108,15 @@ func act(target := {}) -> bool:
 		target = _target
 	if target.is_empty():
 		return false
+	if breaking and target.get("terrain", false):
+		terrain.dig(target.hit - target.raw_normal * 0.35, DIG_RADIUS)
+		return true
+	if not breaking and block_id == TERRAIN_TOOL:
+		var c: Vector3 = target.hit + target.raw_normal * 0.55
+		if c.distance_to(player.global_position + Vector3.UP * 0.9) < RAISE_RADIUS + 0.75:
+			return false   # would bury the player
+		terrain.raise(c, RAISE_RADIUS)
+		return true
 	var box := current_box(target)
 	if breaking:
 		return world.edit_box(box, 0) > 0
@@ -146,6 +163,9 @@ func break_info_at_screen(screen_pos: Vector2) -> Dictionary:
 	var t := raycast(cam.project_ray_origin(screen_pos), cam.project_ray_normal(screen_pos))
 	if t.is_empty():
 		return {}
+	if t.get("terrain", false):
+		# Smooth ground: dig in quick pulses, no cracks.
+		return {"kind": "terrain", "box": AABB(t.hit.snapped(Vector3.ONE * 0.5), Vector3.ONE), "shape": AABB(), "id": 0, "time": DIG_TIME}
 	var id := world.get_block_at(t.hit - t.normal * 0.05)
 	if id <= 0:
 		return {}
@@ -154,6 +174,7 @@ func break_info_at_screen(screen_pos: Vector2) -> Dictionary:
 	var hard: float = HARDNESS.get(Blocks.DEFS[id][0], 0.5)
 	var box := Pieces.break_box(t.hit, t.normal, size, snap_step())
 	return {
+		"kind": "piece",
 		"box": box,
 		"shape": world.solid_bounds(box),   # what is really there, for the cracks overlay
 		"id": id,
@@ -181,7 +202,7 @@ func _overlaps_player(box: AABB) -> bool:
 
 ## Eyedropper: select the material under the crosshair.
 func pick() -> void:
-	if _target.is_empty():
+	if _target.is_empty() or _target.get("terrain", false):
 		return
 	var inside: Vector3 = _target.hit - _target.normal * 0.05
 	var id := world.get_block_at(inside)

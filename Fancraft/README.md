@@ -1,8 +1,9 @@
 # Fancraft
 
-An original, mobile-first voxel sandbox built with Godot 4.6.3 in plain GDScript. It has
-parallax-mapped "3D" materials, free-form building at quarter-block precision, and
-texture packs that players can import themselves.
+An original, mobile-first survival and crafting sandbox (in progress) built with Godot 4.6.3.
+It has smooth diggable terrain (Voxel Tools, MIT, native GDExtension), free-form building at
+quarter-block precision, painted cel-shaded textures, and texture packs that players can
+import themselves.
 
 See **[docs/PLAN.md](docs/PLAN.md)** for the vision, architecture and milestones, and
 **[docs/TEXTURE_PACKS.md](docs/TEXTURE_PACKS.md)** for the pack format.
@@ -18,6 +19,7 @@ builds install over earlier ones as long as they are signed with the same debug 
 | Where | What |
 | --- | --- |
 | Left half | Floating joystick. Push to the edge to sprint. |
+| DIG tool (first hotbar slot) | Tap raises ground; hold digs. With a material selected, tap places a piece and hold breaks pieces or digs ground. |
 | Right half | Drag to look. **Tap** places the selected piece where you tap; **hold** breaks (a ring fills, keep holding to keep breaking). |
 | PIECE | Block → Slab → Thin slab → Half cube → Quarter → Pillar → Beam → Panel → Post |
 | ROT | Rotates the piece (turned, or laid on its side). |

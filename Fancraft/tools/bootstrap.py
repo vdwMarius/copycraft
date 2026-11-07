@@ -17,6 +17,10 @@ VERSION = '4.6.3'
 BASE = f'https://github.com/godotengine/godot-builds/releases/download/{VERSION}-stable/'
 TEMPLATES_SHA512 = 'da606b61c10157844f8300172df374472665f95015495cb1a7cd132c40ede404faa96cc1016a4b9662db9909ddea69632c4948b2cd11163438dad4808881fb68'
 TOOLS = Path(os.environ.get('FANCRAFT_TOOLING', '/home/user/tooling'))
+ROOT = Path(__file__).resolve().parents[1]
+# Voxel Tools (Zylann/godot_voxel, MIT) GDExtension, pinned release archive.
+VOXEL_URL = 'https://github.com/Zylann/godot_voxel/releases/download/v1.7x/GodotVoxelExtension.zip'
+VOXEL_SHA256 = '600737572a5e25541ba6f503e842a3717ba19afafa5474510a6ceff995a1d2d8'
 
 
 def fetch(name, url):
@@ -48,6 +52,16 @@ def main():
             if not (target / name).exists():
                 with z.open('templates/' + name) as src, (target / name).open('wb') as dst:
                     shutil.copyfileobj(src, dst)
+    voxel = fetch('voxel.zip', VOXEL_URL)
+    if hashlib.sha256(voxel.read_bytes()).hexdigest() != VOXEL_SHA256:
+        raise SystemExit('voxel.zip checksum mismatch; delete it and retry')
+    with zipfile.ZipFile(voxel) as z:
+        for name in z.namelist():
+            keep = name.startswith('addons/zylann.voxel/') and not name.endswith('/')
+            if '/bin/' in name:
+                keep = keep and ('linux.' in name and 'x86_64' in name or 'android' in name and 'arm64' in name)
+            if keep:
+                z.extract(name, ROOT)
     # Minimal SDK layout that Godot's non-Gradle exporter needs.
     sdk = TOOLS / 'android-sdk'
     bt = sdk / 'build-tools/35.0.0'
