@@ -91,6 +91,8 @@ func _ready() -> void:
 	Settings.changed.connect(_apply_setting)
 	for k in ["fps_target", "render_scale", "msaa", "shadows", "glow", "render_distance"]:
 		_apply_setting(k)
+	if "--parttest" in OS.get_cmdline_user_args():
+		add_child(load("res://scripts/dev/part_test.gd").new())
 	if "--inputtest" in OS.get_cmdline_user_args():
 		add_child(load("res://scripts/dev/input_test.gd").new())
 	if "--capture" in OS.get_cmdline_user_args():
@@ -223,7 +225,9 @@ func _set_scale(scale: float) -> void:
 	_scale = clampf(scale, 0.5, 1.0)
 	var vp := get_viewport()
 	vp.scaling_3d_scale = _scale
-	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR if _scale >= 0.99 else Viewport.SCALING_3D_MODE_FSR
+	# FSR upscaling needs the Vulkan renderers; the OpenGL fallback uses bilinear.
+	var fsr_ok := RenderingServer.get_current_rendering_method() != "gl_compatibility"
+	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR if _scale < 0.99 and fsr_ok else Viewport.SCALING_3D_MODE_BILINEAR
 
 
 ## Auto resolution: lower the 3D render scale when frames run over budget, and probe

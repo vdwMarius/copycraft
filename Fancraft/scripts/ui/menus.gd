@@ -66,6 +66,7 @@ func _ready() -> void:
 
 
 func _clear() -> VBoxContainer:
+	_rows.clear()   # option rows belong to the content being replaced
 	for c in _panel.get_children():
 		c.queue_free()
 	var outer := VBoxContainer.new()
@@ -220,6 +221,8 @@ func _choice(parent: Control, label: String, key: String, options: Array) -> voi
 
 func _sync_rows() -> void:
 	for key in _rows:
+		if not is_instance_valid(_rows[key]):
+			continue
 		var current = Settings.get_value(key)
 		for btn: Button in _rows[key].get_children():
 			var v = btn.get_meta("value")

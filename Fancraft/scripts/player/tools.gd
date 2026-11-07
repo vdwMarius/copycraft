@@ -52,6 +52,8 @@ func _ray(origin: Vector3, dir: Vector3, plants := true) -> Dictionary:
 		if not pick.is_empty():
 			pick.kind = "plant"
 			pick.normal = -dir
+			pick.collider = null
+			pick.shape = -1
 			return pick
 	if r.is_empty():
 		return {}
@@ -66,6 +68,8 @@ func _ray(origin: Vector3, dir: Vector3, plants := true) -> Dictionary:
 			hit.kind = "plant"
 			hit.position = r.position
 			hit.normal = r.normal
+			hit.collider = r.collider
+			hit.shape = r.shape
 			return hit
 	return {"position": r.position, "normal": r.normal, "collider": r.collider, "shape": r.shape, "kind": kind}
 

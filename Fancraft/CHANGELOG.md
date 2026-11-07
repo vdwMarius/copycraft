@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.2: build selection crash fix
+
+Phone report: switching to another part and back to Foundation crashed the game. Two bugs
+on that path, both reproduced in the cloud:
+- **Hammer aimed at a plant:** when the hologram ray hit a plant's collision, the target had
+  no `collider`, so every frame of building preview raised an error. Plants are now valid
+  "can't build here" targets.
+- **Menu taps after opening Settings:** after Settings had been opened once, every menu tap
+  touched freed option buttons. The build menu is used exactly when switching parts.
+- The hologram only swaps its mesh and material when they change, not every frame.
+- New regression test (`-- --parttest`, part of tools/checks.py):
+  - selects every part in wood and stone and back to Foundation, directly and via
+    build-menu taps;
+  - opens Settings first, then aims the hammer at a tree trunk.
+  It fails on any script error.
+- FSR upscaling is only requested on the Vulkan renderers.
+
 ## 0.9.1: chopping, controls and terrain fixes (phone feedback)
 
 - **Trees gave dirt, bushes couldn't be harvested.** Root cause: in this Voxel Tools

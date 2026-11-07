@@ -15,11 +15,12 @@ for suite in suites:
         print(f'SUITE FAILED: {suite}')
         sys.exit(result.returncode or 1)
 # Game-level checks run the real main scene headless with a dev hook.
-for hook, marker in [('--inputtest', 'INPUT_TEST_RESULT failures=0')]:
+HOOKS = [('--inputtest', 'INPUT_TEST_RESULT failures=0'), ('--parttest', 'PART_TEST_RESULT failures=0')]
+for hook, marker in HOOKS:
     result = subprocess.run([str(root / 'tools/godot.sh'), '--headless', '--', hook], cwd=root, text=True,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=300)
     print('\n'.join(l for l in result.stdout.splitlines() if 'RESULT' in l or 'FAIL' in l or 'SCRIPT ERROR' in l))
     if result.returncode or marker not in result.stdout or 'SCRIPT ERROR' in result.stdout:
         print(f'SUITE FAILED: {hook}')
         sys.exit(result.returncode or 1)
-print(f'CHECKS_PASSED suites={len(suites) + 1}')
+print(f'CHECKS_PASSED suites={len(suites) + len(HOOKS)}')

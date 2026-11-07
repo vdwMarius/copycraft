@@ -41,13 +41,13 @@ static func is_part(node: Object) -> bool:
 ## Work out where the selected part would go for a ray hit.
 ## `hit` = {position, normal, collider}. Returns {} if nothing sensible.
 func plan(hit: Dictionary) -> Dictionary:
-	if hit.is_empty():
-		return {}
+	if hit.is_empty() or hit.get("kind", "") == "plant":
+		return {}   # nothing to build on (or aiming at a tree / bush / rock)
 	var def: Dictionary = Parts.CATALOG[part_id]
 	var p: Vector3 = hit.position
 	var n: Vector3 = hit.normal
 	var level: float
-	var on_part := is_part(hit.collider)
+	var on_part := is_part(hit.get("collider"))
 	if on_part:
 		var other: Node3D = hit.collider
 		var o: Dictionary = other.get_meta("part_info")
@@ -151,8 +151,13 @@ func update_preview(hit: Dictionary, show: bool) -> void:
 	if _plan.is_empty():
 		_ghost.visible = false
 		return
-	_ghost.mesh = PartMeshes.mesh(_plan.id, _plan.mat)
-	_ghost.material_override = PartMeshes.ghost_material(_plan.ok)
+	# Only touch the mesh / material when they actually change.
+	var mesh := PartMeshes.mesh(_plan.id, _plan.mat)
+	if _ghost.mesh != mesh:
+		_ghost.mesh = mesh
+	var mat := PartMeshes.ghost_material(_plan.ok)
+	if _ghost.material_override != mat:
+		_ghost.material_override = mat
 	_ghost.global_transform = _plan.transform
 	_ghost.visible = true
 
