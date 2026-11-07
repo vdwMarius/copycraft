@@ -18,6 +18,7 @@ var material_id := "wood"
 var rotation_steps := 0          # extra quarter turns for roofs / stairs
 var terrain: SmoothTerrain
 var player: Node3D
+var inventory: Inventory
 
 var parts := {}                  # slot key -> StaticBody3D
 var _ghost: MeshInstance3D
@@ -114,7 +115,10 @@ func plan(hit: Dictionary) -> Dictionary:
 			var pz := roundi(q.z / Parts.GRID)
 			out.transform = Transform3D(Basis.IDENTITY, Vector3(px * Parts.GRID, level, pz * Parts.GRID))
 			out.slot = "p:%d:%d:%d" % [px, pz, roundi(level * 10.0)]
-	out.ok = not parts.has(out.slot) and not _hits_player(out)
+	out.cost = Parts.cost(part_id, material_id)
+	out.free = not parts.has(out.slot) and not _hits_player(out)
+	out.affordable = inventory == null or inventory.has_all(out.cost)
+	out.ok = out.free and out.affordable
 	return out
 
 
@@ -155,20 +159,25 @@ func update_preview(hit: Dictionary, show: bool) -> void:
 
 # ------------------------------------------------------------------ placing / removing
 
-## Place the part currently previewed (or planned from `hit`).
-func place(hit := {}) -> bool:
+## Place the part currently previewed (or planned from `hit`). Pays its cost.
+## Returns "" on success, otherwise a short reason for the player.
+func place(hit := {}) -> String:
 	var p := _plan if hit.is_empty() else plan(hit)
-	if p.is_empty() or not p.ok:
-		return false
+	if p.is_empty():
+		return "Aim at the ground or a part"
+	if not p.free:
+		return "Something is in the way"
+	if inventory and not inventory.pay(p.cost):
+		return "Need " + Items.describe(p.cost)
 	_spawn(p)
 	changed.emit()
-	return true
+	return ""
 
 
 func _spawn(p: Dictionary) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.set_meta("part_slot", p.slot)
-	body.set_meta("part_info", {"id": p.id, "mat": p.mat, "level": p.transform.origin.y})
+	body.set_meta("part_info", {"id": p.id, "mat": p.mat, "level": p.transform.origin.y, "cost": p.get("cost", Parts.cost(p.id, p.mat))})
 	var mi := MeshInstance3D.new()
 	mi.mesh = PartMeshes.mesh(p.id, p.mat)
 	if mi.mesh.get_surface_count() > 0 and mi.mesh.surface_get_material(0) == null:
@@ -190,6 +199,11 @@ func demolish(node: Object) -> bool:
 		return false
 	var slot: String = (node as Node).get_meta("part_slot")
 	parts.erase(slot)
+	# Full refund (Valheim-style), as far as the bag has room.
+	if inventory:
+		var info: Dictionary = (node as Node).get_meta("part_info")
+		for id in info.cost:
+			inventory.add(id, info.cost[id])
 	(node as Node).queue_free()
 	changed.emit()
 	return true

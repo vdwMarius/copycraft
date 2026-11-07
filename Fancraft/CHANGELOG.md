@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.9.0: S3, resources and inventory
+
+Phone report on 0.8.0: stable 120 fps on Max Fidelity, occasional dips to 110.
+- **Items:** wood, stone, dirt, sand, fiber, berries and flint, in a 24-slot bag with
+  stacking (50 or 99 per stack). Icons are painted from the texture set, so packs restyle them.
+- **Gathering:**
+  - Chop trees for 4–6 wood.
+  - Break rocks for 3–5 stone, with a 40% chance of flint.
+  - Pick bushes for fiber and berries. Bushes are now targetable.
+  - Dig for dirt, sand near the shore, and stone deeper down.
+  The right tool is faster, but any tool works.
+- **Costs:** building parts cost materials (for example a wood wall is 4 wood; stone parts
+  cost stone, with 1 wood for roofs and stairs). Demolishing refunds in full. Raising
+  ground costs 2 dirt (or sand).
+- **UI:**
+  - The hologram turns red when you can't afford a part.
+  - The hint line shows have / need ("14/6 Wood").
+  - The build menu lists each part's cost and dims parts you can't afford yet.
+- **New HUD and bag:**
+  - BAG button (or I on desktop) opens the inventory, with a Sort button.
+  - A pickup feed on the left shows "+4 Wood".
+- **Creative mode:** Settings → Game mode → Creative makes building free.
+- Broadleaf trees are about 45% denser, so wood is closer to the spawn.
+- **Tests:**
+  - New headless inventory suite.
+  - Input test covers dig yields, refusing to build without materials, paying, refunds,
+    and harvesting a real instanced tree.
+
 ## 0.8.0: stylised 3D survival style (no more cubes)
 
 - **Cubes are gone:** the cube structure layer, block pieces and block materials are removed.

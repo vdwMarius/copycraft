@@ -6,6 +6,7 @@ extends Control
 
 signal open_settings
 signal open_build
+signal open_bag
 
 const LOOK_TAP_TIME := 0.3      # a touch released sooner than this (without dragging) is a tap
 const LOOK_TAP_SLOP := 16.0     # moving further than this turns the touch into camera look
@@ -16,6 +17,8 @@ const TOOL_COLORS := [Color(0.55, 0.38, 0.22), Color(0.72, 0.3, 0.22), Color(0.3
 var player: Player
 var tools: Tools
 var building: BuildSystem
+var inventory: Inventory
+var _feed: Array = []          # recent pickups: [id, amount, seconds left]
 var selected_slot := Tools.HAMMER
 var stats_text := ""
 var menu_open := false
@@ -62,6 +65,20 @@ func toast(text: String) -> void:
 	_toast_time = 2.0
 
 
+## A pickup notification ("+4 Wood") in the feed on the left.
+func add_pickup(id: String, amount: int) -> void:
+	for f in _feed:
+		if f[0] == id:
+			f[1] += amount
+			f[2] = 2.5
+			queue_redraw()
+			return
+	_feed.push_front([id, amount, 2.5])
+	if _feed.size() > 5:
+		_feed.pop_back()
+	queue_redraw()
+
+
 func set_part(id: String) -> void:
 	building.part_id = id
 	_select_slot(Tools.HAMMER)
@@ -84,6 +101,7 @@ func _layout() -> void:
 		"fly": {"pos": br + Vector2(-95, -275), "r": 44.0, "label": "FLY"},
 		"down": {"pos": br + Vector2(-210, -330), "r": 44.0, "label": "DOWN"},
 		"settings": {"pos": Vector2(r.end.x - m - 40, r.position.y + m + 40), "r": 38.0, "label": "MENU"},
+		"bag": {"pos": Vector2(r.end.x - m - 40, r.position.y + m + 128), "r": 38.0, "label": "BAG"},
 		"part": {"pos": Vector2(r.end.x - m - 158, r.position.y + m + 40), "r": 54.0, "label": "PART", "hammer": true},
 		"mat": {"pos": Vector2(r.end.x - m - 278, r.position.y + m + 40), "r": 42.0, "label": "MAT", "hammer": true},
 		"rotate": {"pos": Vector2(r.end.x - m - 380, r.position.y + m + 40), "r": 38.0, "label": "ROT", "hammer": true},
@@ -105,6 +123,11 @@ func _layout() -> void:
 func _process(delta: float) -> void:
 	if _toast_time > 0.0:
 		_toast_time -= delta
+		queue_redraw()
+	if not _feed.is_empty():
+		for f in _feed:
+			f[2] -= delta
+		_feed = _feed.filter(func(f): return f[2] > 0.0)
 		queue_redraw()
 	if player == null:
 		return
@@ -282,6 +305,8 @@ func _press(b: String) -> void:
 			open_settings.emit()
 		"part":
 			open_build.emit()
+		"bag":
+			open_bag.emit()
 		"mat":
 			building.material_id = "stone" if building.material_id == "wood" else "wood"
 			toast(Parts.MATERIALS[building.material_id].name)
@@ -329,6 +354,7 @@ func _desktop_key(e: InputEventKey) -> void:
 		KEY_R: _press("rotate")
 		KEY_G: _press("mat")
 		KEY_TAB: open_build.emit()
+		KEY_I: open_bag.emit()
 		KEY_M: open_settings.emit()
 		_:
 			if e.keycode >= KEY_1 and e.keycode <= KEY_3:
@@ -379,11 +405,27 @@ func _draw() -> void:
 		draw_circle(rc.get_center() + Vector2(0, -8), 22.0, TOOL_COLORS[i])
 		_text_centered(Tools.NAMES[i].to_upper(), rc.get_center() + Vector2(0, 26), 15)
 		draw_rect(rc, Color(1, 0.9, 0.5, 1) if sel else Color(1, 1, 1, 0.35), false, 4.0 if sel else 2.0)
-	var hints := ["Tap: raise ground   ·   Hold: dig", "Hold: chop trees, bushes and rocks", "Tap: place %s (%s)   ·   Hold: demolish" % [Parts.CATALOG[building.part_id].name, Parts.MATERIALS[building.material_id].name]]
+	var cost := Parts.cost(building.part_id, building.material_id)
+	var have := ""
+	if inventory and not inventory.creative:
+		var bits := []
+		for id in cost:
+			bits.append("%d/%d %s" % [inventory.count(id), cost[id], Items.name_of(id)])
+		have = "   ·   " + ", ".join(bits)
+	var hints := ["Tap: raise ground (2 Dirt)   ·   Hold: dig", "Hold: chop trees, bushes and rocks", "Tap: place %s (%s)%s   ·   Hold: demolish" % [Parts.CATALOG[building.part_id].name, Parts.MATERIALS[building.material_id].name, have]]
 	_text_centered(hints[selected_slot], Vector2(center.x, _hotbar_rects[0].position.y - 22), 20)
 	if Settings.get_value("show_stats"):
 		draw_multiline_string_outline(_font, _safe.position + Vector2(16, 30), stats_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, -1, 4, Color(0, 0, 0, 0.6))
 		draw_multiline_string(_font, _safe.position + Vector2(16, 30), stats_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, -1, Color(1, 1, 1, 0.92))
+	# Pickup feed
+	var fy := center.y - 40.0
+	for f in _feed:
+		var a := clampf(f[2], 0.0, 1.0)
+		var icon := ItemIcons.get_icon(f[0])
+		draw_texture_rect(icon, Rect2(_safe.position.x + 24, fy - 22, 44, 44), false, Color(1, 1, 1, a))
+		draw_string_outline(_font, Vector2(_safe.position.x + 78, fy + 9), "+%d %s" % [f[1], Items.name_of(f[0])], HORIZONTAL_ALIGNMENT_LEFT, -1, 24, 5, Color(0, 0, 0, 0.6 * a))
+		draw_string(_font, Vector2(_safe.position.x + 78, fy + 9), "+%d %s" % [f[1], Items.name_of(f[0])], HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(1, 1, 0.9, a))
+		fy += 52.0
 	if _toast_time > 0.0:
 		_text_centered(_toast, Vector2(center.x, center.y - 120), 30, Color(1, 1, 1, clampf(_toast_time, 0, 1)))
 

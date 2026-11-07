@@ -6,6 +6,7 @@ signal closed
 signal part_chosen(id: String)
 
 var hud: Hud
+var inventory: Inventory
 var _panel: PanelContainer
 var _body: VBoxContainer
 var _rows := {}   # setting key -> HBoxContainer of toggle buttons
@@ -155,6 +156,7 @@ func open_settings() -> void:
 		btn.pressed.connect(func(): Settings.apply_preset(p); _sync_rows())
 		presets.add_child(btn)
 	_row(b, "Quality preset", presets)
+	_choice(b, "Game mode", "creative", [["Survival", false], ["Creative", true]])
 	_choice(b, "Frame rate cap", "fps_target", [["30", 30], ["60", 60], ["90", 90], ["120", 120], ["Max", 0]])
 	_choice(b, "View distance", "render_distance", [["3", 3], ["4", 4], ["6", 6], ["8", 8], ["10", 10], ["12", 12]])
 	_choice(b, "3D resolution", "render_scale", [["Auto", -1.0], ["50%", 0.5], ["67%", 0.67], ["75%", 0.75], ["90%", 0.9], ["100%", 1.0]])
@@ -236,8 +238,12 @@ func open_build() -> void:
 	grid.add_theme_constant_override("v_separation", 10)
 	for id in Parts.ORDER:
 		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(190, 96)
-		btn.text = Parts.CATALOG[id].name
+		btn.custom_minimum_size = Vector2(190, 110)
+		var mat: String = hud.building.material_id if hud else "wood"
+		var cost := Parts.cost(id, mat)
+		btn.text = "%s\n%s" % [Parts.CATALOG[id].name, Items.describe(cost)]
+		if inventory and not inventory.has_all(cost):
+			btn.modulate = Color(1, 0.75, 0.75, 0.75)   # can't afford yet (still selectable)
 		btn.add_theme_font_size_override("font_size", 20)
 		btn.pressed.connect(func(): part_chosen.emit(id); close_menu())
 		grid.add_child(btn)
@@ -246,4 +252,51 @@ func open_build() -> void:
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.text = "Aim with the crosshair: the hologram shows where the part snaps (green = OK, red = blocked). Tap anywhere to place. Walls snap to the nearest edge of a foundation or floor; aim at the top of walls for upper floors and roofs. MAT switches wood / stone, ROT turns roofs and stairs. Hold on a part to demolish it."
 	b.add_child(note)
+	visible = true
+
+
+# ------------------------------------------------------------------ inventory
+
+func open_inventory() -> void:
+	var b := _clear()
+	_heading(b, "Bag" + ("  (creative: building is free)" if inventory.creative else ""))
+	var grid := GridContainer.new()
+	grid.columns = 8
+	grid.add_theme_constant_override("h_separation", 10)
+	grid.add_theme_constant_override("v_separation", 10)
+	for i in Inventory.SLOTS:
+		var slot: Dictionary = inventory.slots[i]
+		var panel := PanelContainer.new()
+		panel.custom_minimum_size = Vector2(118, 118)
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0.12, 0.15, 0.2, 0.95)
+		sb.set_corner_radius_all(12)
+		sb.set_border_width_all(2)
+		sb.border_color = Color(1, 1, 1, 0.12)
+		panel.add_theme_stylebox_override("panel", sb)
+		var box := VBoxContainer.new()
+		box.alignment = BoxContainer.ALIGNMENT_CENTER
+		panel.add_child(box)
+		if not slot.is_empty():
+			var icon := TextureRect.new()
+			icon.texture = ItemIcons.get_icon(slot.id)
+			icon.custom_minimum_size = Vector2(56, 56)
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			box.add_child(icon)
+			var l := Label.new()
+			l.text = "%s ×%d" % [Items.name_of(slot.id), slot.n]
+			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			l.add_theme_font_size_override("font_size", 17)
+			box.add_child(l)
+		grid.add_child(panel)
+	b.add_child(grid)
+	var sort := _button("Sort")
+	sort.custom_minimum_size = Vector2(160, 58)
+	sort.pressed.connect(func(): inventory.sort(); open_inventory())
+	b.add_child(sort)
+	var tip := Label.new()
+	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	tip.text = "Chop trees (axe) for wood, break rocks for stone and flint, pick bushes for fiber and berries, dig for dirt, sand and stone. Building parts cost materials; demolishing refunds them."
+	b.add_child(tip)
 	visible = true

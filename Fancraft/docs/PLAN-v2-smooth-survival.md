@@ -67,7 +67,7 @@ aspects are gone:
 |---|---|---|
 | S1 | Smooth world | Voxel Tools terrain with LOD, stylised triplanar shader, collision, player, touch dig (hold) and raise (tap with the terrain tool), 120 fps target on the S26 Ultra |
 | S2 | Build on terrain | Snap-together building parts, tools (shovel, axe, hammer), stylised vegetation (0.8.0) |
-| S3 | Resources and inventory | Dig and break yields items by material and volume, pickups, inventory UI, stack limits |
+| S3 | Resources and inventory | Yields from digging, chopping, rocks and bushes; 24-slot bag; building costs and refunds; creative mode (0.9.0) |
 | S4 | Crafting | Recipes, crafting UI, workbench, tool tiers (dig speed and size) |
 | S5 | Survival loop | Health, hunger, stamina, day/night, death and respawn, food from plants and fishing |
 | S6 | Living world | Biomes, trees and rocks as instanced meshes (choppable), foliage, caves, water, ores |

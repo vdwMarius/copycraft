@@ -27,7 +27,7 @@ static func create(voxel_terrain: Node3D) -> Node3D:
 	# Broadleaf forests on gentle grassy slopes.
 	for v in 3:
 		_add(lib, id, KIND_TREE, func(d: int) -> ArrayMesh: return PropMeshes.tree_broadleaf(v, d), {
-			"lod_index": 2, "density": 0.0022, "max_slope": 28.0, "min_h": water + 2.5, "max_h": 60.0,
+			"lod_index": 2, "density": 0.0032, "max_slope": 28.0, "min_h": water + 2.5, "max_h": 60.0,
 			"scale": Vector2(0.8, 1.25), "noise": forest, "noise_threshold": 0.05, "topsoil": true,
 			"collision": PropMeshes.tree_collision("broadleaf"), "offset": -0.15,
 		}, [PropMeshes.bark_material(), PropMeshes.foliage_material()])
@@ -44,6 +44,7 @@ static func create(voxel_terrain: Node3D) -> Node3D:
 		_add(lib, id, KIND_BUSH, func(d: int) -> ArrayMesh: return PropMeshes.bush(v, d), {
 			"lod_index": 1, "density": 0.007, "max_slope": 30.0, "min_h": water + 2.0, "max_h": 64.0,
 			"scale": Vector2(0.7, 1.3), "noise": forest, "noise_threshold": -0.2, "topsoil": true, "offset": -0.1,
+			"collision": [_bush_shape()],
 		}, [PropMeshes.foliage_material()])
 		id += 1
 	for v in 3:
@@ -135,3 +136,10 @@ static func _add_cover(lib: Object, id: int, mesh: ArrayMesh, density: float, no
 	item.hide_beyond_max_lod = true
 	lib.add_item(id, item)
 	item_kinds[id] = "cover"
+
+
+## Bushes get a small sphere so they can be targeted and harvested (sphere = "bush").
+static func _bush_shape() -> Dictionary:
+	var sphere := SphereShape3D.new()
+	sphere.radius = 0.55
+	return {"shape": sphere, "transform": Transform3D(Basis.IDENTITY, Vector3(0, 0.55, 0))}

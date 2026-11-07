@@ -48,6 +48,19 @@ func _ready() -> void:
 		await process_frame
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("res://build/shot_build.png")
+	# Pickup feed + bag screen.
+	for pair in [["wood", 14], ["stone", 9], ["fiber", 3], ["berries", 2], ["dirt", 22], ["flint", 1]]:
+		main.inventory.add(pair[0], pair[1])
+	for i in 5:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("res://build/shot_feed.png")
+	main.hud.open_bag.emit()
+	for i in 4:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("res://build/shot_bag.png")
+	main.menus.close_menu()
 	# Menu: tap the "60" fps button with a simulated finger.
 	main.hud.open_settings.emit()
 	await process_frame

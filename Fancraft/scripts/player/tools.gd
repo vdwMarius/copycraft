@@ -6,6 +6,8 @@ extends Node3D
 ##   Hammer: tap places the previewed building part, hold demolishes a part.
 ## Any tool can hold-harvest anything, just slower than the right tool.
 
+signal message(text: String)
+
 const SHOVEL := 0
 const AXE := 1
 const HAMMER := 2
@@ -20,6 +22,8 @@ var player: Player
 var terrain: SmoothTerrain
 var building: BuildSystem
 var vegetation: Node3D           # VoxelInstancer
+var inventory: Inventory
+var _rng := RandomNumberGenerator.new()
 var edit_count := 0              # successful actions (tests / stats)
 
 ## Screen point to aim at while a finger rests on the view (x < 0: crosshair).
@@ -50,7 +54,7 @@ func _ray(origin: Vector3, dir: Vector3) -> Dictionary:
 		kind = "terrain"
 	elif _owned_by(r.collider, vegetation):
 		kind = "plant"
-	return {"position": r.position, "normal": r.normal, "collider": r.collider, "kind": kind}
+	return {"position": r.position, "normal": r.normal, "collider": r.collider, "shape": r.shape, "kind": kind}
 
 
 func _ray_screen(screen_pos: Vector2) -> Dictionary:
@@ -91,18 +95,29 @@ func hold_info(screen_pos: Vector2) -> Dictionary:
 
 ## Finish a hold at `screen_pos` (dig one pulse, chop the plant, demolish the part).
 func complete_hold(screen_pos: Vector2) -> bool:
-	var t := _ray_screen(screen_pos)
+	return complete_target(_ray_screen(screen_pos))
+
+
+## Finish a hold on an already-traced target (see _ray).
+func complete_target(t: Dictionary) -> bool:
 	if t.is_empty():
 		return false
 	match t.kind:
 		"terrain":
-			terrain.dig(t.position - t.normal * 0.35, DIG_RADIUS)
+			var at: Vector3 = t.position - t.normal * 0.35
+			var mat := dug_material(at)
+			terrain.dig(at, DIG_RADIUS)
+			_give(mat, 2 if mat != "stone" else 1)
 		"part":
 			building.demolish(t.collider)
 		"plant":
+			var kind := plant_kind(t.collider, t.get("shape", 0))
 			var p: Vector3 = t.position
 			var ground := terrain.height_at(p.x, p.z)
-			vegetation.remove_instances_in_sphere(Vector3(p.x, minf(ground, p.y), p.z), 1.6)
+			vegetation.remove_instances_in_sphere(Vector3(p.x, minf(ground, p.y), p.z), 1.6 if kind != "bush" else 1.0)
+			var got := harvest_yield(kind)
+			for id in got:
+				_give(id, got[id])
 		_:
 			return false
 	edit_count += 1
@@ -119,12 +134,66 @@ func tap(screen_pos: Vector2) -> bool:
 			var c: Vector3 = t.position + t.normal * 0.55
 			if c.distance_to(player.global_position + Vector3.UP * 0.9) < RAISE_RADIUS + 0.75:
 				return false   # would bury the player
+			if inventory and not inventory.pay({"dirt": 2}):
+				if not inventory.pay({"sand": 2}):
+					message.emit("Need 2 Dirt to raise ground: dig some first")
+					return false
 			terrain.raise(c, RAISE_RADIUS)
 		HAMMER:
 			# Building aims with the crosshair preview, so a tap anywhere places it.
-			if not building.place():
+			var why := building.place()
+			if why != "":
+				message.emit(why)
 				return false
 		_:
 			return false
 	edit_count += 1
 	return true
+
+
+# ------------------------------------------------------------------ resources
+
+## What a dig at `at` yields: the voxel's material (topsoil near water is sand).
+func dug_material(at: Vector3) -> String:
+	var t = terrain.tool
+	t.channel = ClassDB.class_get_integer_constant("VoxelBuffer", "CHANNEL_INDICES")
+	var idx: int = t.get_voxel(Vector3i(at.round()))
+	if idx == TerrainShape.STONE:
+		return "stone"
+	if at.y < TerrainShape.WATER_LEVEL + 2.0:
+		return "sand"
+	return "dirt"
+
+
+## Which kind of plant a collider belongs to, from its collision shape:
+## capsule / cylinder = tree trunk, convex hull = rock, sphere = bush.
+func plant_kind(collider: Object, shape_index: int) -> String:
+	var body := collider as CollisionObject3D
+	if body == null:
+		return "tree"
+	var owner_id := body.shape_find_owner(shape_index)
+	var shape := body.shape_owner_get_shape(owner_id, 0) if owner_id >= 0 else null
+	if shape is ConvexPolygonShape3D or shape is BoxShape3D:
+		return "rock"
+	if shape is SphereShape3D:
+		return "bush"
+	return "tree"
+
+
+func harvest_yield(kind: String) -> Dictionary:
+	match kind:
+		"rock":
+			var y := {"stone": _rng.randi_range(3, 5)}
+			if _rng.randf() < 0.4:
+				y["flint"] = 1
+			return y
+		"bush":
+			return {"fiber": _rng.randi_range(2, 3), "berries": _rng.randi_range(1, 2)}
+	return {"wood": _rng.randi_range(4, 6)}
+
+
+func _give(id: String, n: int) -> void:
+	if inventory == null:
+		return
+	if inventory.add(id, n) > 0:
+		message.emit("Bag full: some %s was lost" % Items.name_of(id))

@@ -18,6 +18,7 @@ const DEFAULTS := {
 	"msaa": 1,                   # 0 off, 1 2x
 	"look_sensitivity": 1.0,
 	"show_stats": true,
+	"creative": false,           # free, unlimited building and terrain tools
 }
 
 const PRESETS := {

@@ -11,6 +11,7 @@ var terrain: SmoothTerrain
 var vegetation: Node3D
 var building: BuildSystem
 var tools: Tools
+var inventory: Inventory
 var player: Player
 var hud: Hud
 var menus: Menus
@@ -43,7 +44,11 @@ func _ready() -> void:
 	vegetation = Vegetation.create(terrain.terrain)
 	player.position = _find_spawn(terrain.shape)
 	player.terrain = terrain
+	inventory = Inventory.new()
+	inventory.creative = Settings.get_value("creative")
+	Textures.textures_changed.connect(ItemIcons.clear)
 	building = BuildSystem.new()
+	building.inventory = inventory
 	building.name = "Buildings"
 	building.terrain = terrain
 	building.player = player
@@ -53,17 +58,23 @@ func _ready() -> void:
 	tools.terrain = terrain
 	tools.building = building
 	tools.vegetation = vegetation
+	tools.inventory = inventory
 	add_child(tools)
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	hud = Hud.new()
 	layer.add_child(hud)
 	hud.setup(player, tools, building)
+	hud.inventory = inventory
+	tools.message.connect(hud.toast)
+	inventory.gained.connect(hud.add_pickup)
 	menus = Menus.new()
 	menus.hud = hud
+	menus.inventory = inventory
 	layer.add_child(menus)
 	hud.open_settings.connect(func(): _menu(true); menus.open_settings())
 	hud.open_build.connect(func(): _menu(true); menus.open_build())
+	hud.open_bag.connect(func(): _menu(true); menus.open_inventory())
 	menus.closed.connect(func(): _menu(false))
 	menus.part_chosen.connect(hud.set_part)
 	_loading = Label.new()
@@ -193,6 +204,9 @@ func _apply_setting(key: String) -> void:
 			RenderingServer.directional_shadow_atlas_set_size(2048 if q == 1 else 4096, true)
 		"glow":
 			env.glow_enabled = bool(v)
+		"creative":
+			if inventory:
+				inventory.creative = bool(v)
 		"render_distance":
 			var far := float(v) * 16.0
 			env.fog_depth_begin = far * 0.7

@@ -40,3 +40,21 @@ const MATERIALS := {
 # - stairs: 8 steps rising from y=0 at z=+1 to y=2.4 at z=-1, x in [-0.9, 0.9],
 #   with side stringers.
 # - doorway / window: a wall with a rectangular opening (Rect2 in x / y), framed.
+
+
+## Material cost of one part (wood parts cost wood; stone parts cost mostly stone,
+## with a little wood for roofs / stairs framing). Demolishing refunds it in full.
+const COST_UNITS := {
+	"foundation": 6, "floor": 3, "wall": 4, "doorway": 3, "window": 3, "half_wall": 2,
+	"roof": 4, "stairs": 4, "pillar": 2, "beam": 2,
+}
+
+
+static func cost(part_id: String, material_id: String) -> Dictionary:
+	var n: int = COST_UNITS.get(part_id, 2)
+	if material_id == "stone":
+		var c := {"stone": n}
+		if part_id in ["roof", "stairs"]:
+			c["wood"] = 1
+		return c
+	return {"wood": n}

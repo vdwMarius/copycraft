@@ -32,6 +32,17 @@ func _ready() -> void:
 	if after_hold - before < 1:
 		failures += 1
 		printerr("FAIL: holding did not break anything")
+	var inv: Inventory = main.inventory
+	var dug: int = inv.count("dirt") + inv.count("sand") + inv.count("stone")
+	if dug < 1:
+		failures += 1
+		printerr("FAIL: digging should yield dirt, sand or stone")
+	print("dug materials: ", dug)
+	# With no wood, a foundation must be refused; with wood it is placed and paid for.
+	if inv.count("wood") == 0 and main.tools.tap(centre):
+		failures += 1
+		printerr("FAIL: building without materials should be refused")
+	inv.add("wood", 20)
 	# Let the broken blocks' meshes and collision land (a real re-tap takes >100 ms).
 	for i in 20:
 		await tree.physics_frame
@@ -43,6 +54,76 @@ func _ready() -> void:
 	if after_tap - after_hold < 1:
 		failures += 1
 		printerr("FAIL: tapping did not place")
+	if inv.count("wood") != 20 - Parts.cost("foundation", "wood").wood:
+		failures += 1
+		printerr("FAIL: the foundation should cost %d wood (have %d)" % [Parts.cost("foundation", "wood").wood, inv.count("wood")])
+	# Demolish refunds in full.
+	var placed: Array = main.building.parts.values()
+	if not placed.is_empty():
+		var wood_before := inv.count("wood")
+		main.building.demolish(placed[0])
+		if inv.count("wood") - wood_before != Parts.cost("foundation", "wood").wood:
+			failures += 1
+			printerr("FAIL: demolishing should refund the cost")
+	# Find a real instanced plant around the spawn and harvest it.
+	var found := {}
+	for ring in [3.0, 6.0, 8.5]:
+		for k in 24:
+			var a := TAU * k / 24.0
+			var dir := Vector3(cos(a), -0.15, sin(a)).normalized()
+			for dy in [0.4, 1.2, 2.0]:
+				var t: Dictionary = main.tools._ray(p.global_position + Vector3(0, dy, 0), dir)
+				if t.get("kind", "") == "plant":
+					found = t
+					break
+			if not found.is_empty():
+				break
+		if not found.is_empty():
+			break
+	if found.is_empty():
+		var space := p.get_world_3d().direct_space_state
+		for gz in range(-20, 21, 2):
+			for gx in range(-20, 21, 2):
+				var o := p.global_position + Vector3(gx, 25, gz)
+				var q := PhysicsRayQueryParameters3D.create(o, o + Vector3.DOWN * 60.0)
+				q.exclude = [p.get_rid()]
+				var r := space.intersect_ray(q)
+				if not r.is_empty() and Tools._owned_by(r.collider, main.vegetation):
+					found = {"position": r.position, "normal": r.normal, "collider": r.collider, "shape": r.shape, "kind": "plant"}
+					break
+			if not found.is_empty():
+				break
+	var bodies: Array = main.vegetation.find_children("*", "CollisionObject3D", true, false)
+	var nearest := INF
+	for bd in bodies:
+		nearest = minf(nearest, (bd as Node3D).global_position.distance_to(p.global_position))
+	print("vegetation bodies: ", bodies.size(), " nearest ", nearest, " children: ", main.vegetation.get_child_count())
+	if found.is_empty() and not bodies.is_empty():
+		var bd: Node3D = bodies[0]
+		for b2 in bodies:
+			if (b2 as Node3D).global_position.distance_to(p.global_position) < bd.global_position.distance_to(p.global_position):
+				bd = b2
+		found = {"position": bd.global_position + Vector3(0, 1.0, 0), "normal": Vector3.BACK, "collider": bd, "shape": 0, "kind": "plant"}
+	if found.is_empty():
+		print("no plant within reach of spawn (skipped harvest check); instance counts: ", main.vegetation.debug_get_instance_counts())
+	else:
+		var kind: String = main.tools.plant_kind(found.collider, found.shape)
+		var totals := {}
+		for id in Items.ORDER:
+			totals[id] = inv.count(id)
+		main.tools.complete_target(found)
+		var got := []
+		for id in Items.ORDER:
+			if inv.count(id) > totals[id]:
+				got.append("%s+%d" % [id, inv.count(id) - totals[id]])
+		print("harvested a ", kind, ": ", got)
+		if got.is_empty():
+			failures += 1
+			printerr("FAIL: harvesting a plant gave nothing")
+	var y: Dictionary = main.tools.harvest_yield("tree")
+	if y.get("wood", 0) < 4:
+		failures += 1
+		printerr("FAIL: trees should yield 4-6 wood")
 	# Swipe while breaking: the view must not turn.
 	_touch(5, centre, true)
 	t0 = Time.get_ticks_msec()
