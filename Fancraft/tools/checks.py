@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+"""Run Fancraft's headless regression suites; fail on script errors even if Godot exits 0."""
+from pathlib import Path
+import subprocess
+import sys
+
+root = Path(__file__).resolve().parents[1]
+suites = ['world_core', 'texture_library']
+for suite in suites:
+    result = subprocess.run([str(root / 'tools/godot.sh'), '--headless', '--script', f'res://tests/{suite}.gd'],
+                            cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=300)
+    print(result.stdout, end='', flush=True)
+    marker = f'{suite.upper()}_RESULT failures=0'
+    if result.returncode or marker not in result.stdout or 'SCRIPT ERROR' in result.stdout:
+        print(f'SUITE FAILED: {suite}')
+        sys.exit(result.returncode or 1)
+print(f'CHECKS_PASSED suites={len(suites)}')
