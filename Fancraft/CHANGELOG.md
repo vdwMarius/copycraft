@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.8.0: stylised 3D survival style (no more cubes)
+
+- **Cubes are gone:** the cube structure layer, block pieces and block materials are removed.
+- **Vegetation:** procedural stylised trees (3 broadleaf and 2 pine variants), bushes, rocks
+  (some mossy), grass and flower tufts, all generated in code with no asset files. They are
+  scattered natively by Voxel Tools' VoxelInstancer with distance-based detail levels:
+  broadleaf trees are 780 / 356 / 48 triangles, and collision is created near the player.
+  Grass grows only on topsoil and shrinks out with distance. Plants vanish if the ground
+  under them is dug away.
+- **Building parts** in wood or stone (Valheim-style) on a 2 m grid: foundation, floor,
+  wall, doorway, window wall, half wall, 45° roof, stairs, pillar, beam. A hologram at the
+  crosshair shows the snap (green = OK, red = blocked).
+  - Walls snap to the nearest foundation or floor edge.
+  - Aiming at a wall top builds the next storey.
+  - Aiming at a side continues the same storey.
+- **Tools** (bottom bar):
+  - Shovel: tap raises ground, hold digs.
+  - Axe: hold chops trees, bushes and rocks.
+  - Hammer: tap places, hold demolishes.
+  Any tool can do any hold action, just slower than the right tool.
+- **Shaders:** foliage (cel shading, wind sway, back-light), grass (sway, distance fade)
+  and props (texture-array cel shading).
+- **Tests:** input test now covers foundation snapping, walls on edges, blocked double
+  placement and upper floors on wall tops.
+- **Repo fix:** `build/` ignore rules were also hiding `scripts/build/`; they are now
+  anchored to the project roots.
+
 ## 0.7.0: S1, the smooth world (new direction)
 
 Approved direction: smooth diggable terrain plus survival, crafting and exploration (see

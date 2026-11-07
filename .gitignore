@@ -1,5 +1,5 @@
 .godot/
-addons/zylann.voxel/
-build/
+/addons/zylann.voxel/
+/build/
 *.apk
 *.keystore

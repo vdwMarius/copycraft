@@ -1,8 +1,8 @@
 # Fancraft
 
 An original, mobile-first survival and crafting sandbox (in progress) built with Godot 4.6.3.
-It has smooth diggable terrain (Voxel Tools, MIT, native GDExtension), free-form building at
-quarter-block precision, painted cel-shaded textures, and texture packs that players can
+It has smooth diggable terrain (Voxel Tools, MIT, native GDExtension), snap-together building parts
+(wood and stone), procedural stylised trees, bushes, rocks and grass, painted cel-shaded textures, and texture packs that players can
 import themselves.
 
 See **[docs/PLAN.md](docs/PLAN.md)** for the vision, architecture and milestones, and
@@ -19,18 +19,13 @@ builds install over earlier ones as long as they are signed with the same debug 
 | Where | What |
 | --- | --- |
 | Left half | Floating joystick. Push to the edge to sprint. |
-| DIG tool (first hotbar slot) | Tap raises ground; hold digs. With a material selected, tap places a piece and hold breaks pieces or digs ground. |
-| Right half | Drag to look. **Tap** places the selected piece where you tap; **hold** breaks (a ring fills, keep holding to keep breaking). |
-| PIECE | Block → Slab → Thin slab → Half cube → Quarter → Pillar → Beam → Panel → Post |
-| ROT | Rotates the piece (turned, or laid on its side). |
-| SNAP | Quarter / Half / Block: how pieces line up on the surface you touch. |
-| PICK | Copies the material under the crosshair. |
-| Hotbar / ALL | Picks a material, or opens the full material grid. |
+| SHOVEL | Tap raises ground; hold digs. |
+| AXE | Hold chops trees, bushes and rocks. |
+| HAMMER | Aim the hologram with the crosshair and tap to build; hold a part to demolish it. PART picks the part, MAT switches wood/stone, ROT turns roofs and stairs. |
+| Right half | Drag to look. Tap / hold do the selected tool's action where you touch (the hammer builds at the crosshair hologram). |
 | FLY / DOWN | Creative flight. JUMP rises; DOWN descends. |
 | MENU | Quality presets, frame-rate cap (up to 120), view distance, 3D resolution (Auto by default), texture resolution (16–512), 3D surface depth, shadows, anti-aliasing, and the texture pack manager. |
 
-Pieces are placed flush against the surface you touch, so half a block can sit on top of
-another half, straddle two cells, or overhang. Breaking removes a piece-sized region.
 
 Desktop: WASD, mouse, Space, Shift, F to fly, Q to descend, LMB to break, RMB to place,
 MMB to pick, R/T/G for rotate/piece/snap, Tab for materials, M for the menu, Esc to free

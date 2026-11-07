@@ -195,8 +195,8 @@ static func _tube(st: SurfaceTool, points: Array, radii: Array, sides: int, seed
 			var q3: Array = rings[i + 1][s]
 			var c0 := tint * ao0
 			var c1 := tint * ao1
-			c0.a = 0.0
-			c1.a = 0.0
+			c0.a = 0.95   # saturation (prop shader)
+			c1.a = 0.95
 			var outward: Vector3 = (q0[1] + q2[1]) * 0.5
 			_tri(st, [q0[0], q1[0], q2[0]], [q0[1], q1[1], q2[1]], [c0, c0, c1], [q0[2], q1[2], q2[2]], outward, Vector2(bark_layer, 0))
 			_tri(st, [q0[0], q2[0], q3[0]], [q0[1], q2[1], q3[1]], [c0, c1, c1], [q0[2], q2[2], q3[2]], outward, Vector2(bark_layer, 0))
@@ -231,8 +231,8 @@ static func tree_broadleaf(variant: int, detail: int) -> ArrayMesh:
 	# Canopy: clumps around a centre above the trunk.
 	var crown := 2.4 + _rand(variant, 4) * 0.8
 	var canopy_c := top + Vector3(0, crown * 0.75, 0)
-	var dark := Color(0.16, 0.38, 0.17).lerp(Color(0.2, 0.42, 0.14), _rand(variant, 5))
-	var light := Color(0.52, 0.8, 0.3).lerp(Color(0.62, 0.84, 0.32), _rand(variant, 6))
+	var dark := Color(0.16, 0.33, 0.17).lerp(Color(0.19, 0.36, 0.15), _rand(variant, 5))
+	var light := Color(0.42, 0.62, 0.28).lerp(Color(0.5, 0.66, 0.3), _rand(variant, 6))
 	var clumps: int = [8, 4, 2][detail]
 	var subdiv: int = 1 if detail < 2 else 0
 	if detail == 0:
@@ -265,8 +265,8 @@ static func tree_pine(variant: int, detail: int) -> ArrayMesh:
 	_tube(bark, path, radii, sides, sv, bark_layer, Color(1.0, 0.9, 0.86), 0.7 if detail == 0 else 0.3)
 	var tiers: int = [5, 3, 2][detail]
 	var cone_sides: int = [10, 8, 6][detail]
-	var dark := Color(0.1, 0.3, 0.2)
-	var light := Color(0.32, 0.6, 0.34).lerp(Color(0.4, 0.62, 0.3), _rand(variant, 4))
+	var dark := Color(0.11, 0.27, 0.19)
+	var light := Color(0.26, 0.48, 0.3).lerp(Color(0.32, 0.5, 0.28), _rand(variant, 4))
 	var base_y := height * 0.22
 	for t in tiers:
 		var f := float(t) / tiers
@@ -310,8 +310,8 @@ static func bush(variant: int, detail: int) -> ArrayMesh:
 	var sv := float(variant) * 4.7 + 0.3
 	var size := 1.0 + _rand(variant, 1) * 0.6
 	var center := Vector3(0, size * 0.45, 0)
-	var dark := Color(0.14, 0.34, 0.15)
-	var light := Color(0.48, 0.74, 0.28).lerp(Color(0.56, 0.78, 0.36), _rand(variant, 2))
+	var dark := Color(0.15, 0.31, 0.15)
+	var light := Color(0.4, 0.6, 0.26).lerp(Color(0.46, 0.64, 0.3), _rand(variant, 2))
 	var clumps: int = [4, 2, 1][detail]
 	var subdiv: int = 1 if detail < 2 else 0
 	_clump(st, center, size * 0.6, 0.75, subdiv, sv, center, size, dark, light, 0.0)
@@ -321,7 +321,7 @@ static func bush(variant: int, detail: int) -> ArrayMesh:
 		_clump(st, c, size * (0.38 + _rand(variant, 30 + k) * 0.12), 0.8, subdiv, sv + k, center, size, dark, light, 0.0)
 	if variant % 3 != 2 and detail < 2:
 		# Berries / blossoms: small bright clumps on the surface.
-		var berry := [Color(0.85, 0.2, 0.25), Color(1.0, 0.85, 0.3), Color(0.95, 0.95, 0.9)][variant % 3]
+		var berry: Color = [Color(0.85, 0.2, 0.25), Color(1.0, 0.85, 0.3), Color(0.95, 0.95, 0.9)][variant % 3]
 		for k in [7, 3, 0][detail]:
 			var d := Vector3(_rand(variant, 40 + k) - 0.5, _rand(variant, 50 + k) * 0.8, _rand(variant, 60 + k) - 0.5).normalized()
 			var p := center + Vector3(d.x * size * 0.62, d.y * size * 0.45, d.z * size * 0.62)
@@ -332,8 +332,8 @@ static func bush(variant: int, detail: int) -> ArrayMesh:
 static func rock(variant: int, detail: int) -> ArrayMesh:
 	var st := _begin()
 	var sv := float(variant) * 5.9 + 2.1
-	var size := 0.6 + _rand(variant, 1) * 1.4
-	var stretch := Vector3(1.0 + _rand(variant, 2) * 0.5, 0.55 + _rand(variant, 3) * 0.35, 0.9 + _rand(variant, 4) * 0.4)
+	var size := 0.9 + _rand(variant, 1) * 1.1
+	var stretch := Vector3(1.0 + _rand(variant, 2) * 0.4, 0.8 + _rand(variant, 3) * 0.45, 0.9 + _rand(variant, 4) * 0.35)
 	var ico := _ico_sphere(1 if detail == 0 else 0)
 	var verts: PackedVector3Array = ico[0]
 	var pos := PackedVector3Array()
@@ -356,10 +356,11 @@ static func rock(variant: int, detail: int) -> ArrayMesh:
 		# Painted light: three flat tone bands like the reference sheets.
 		var k := n.dot(L)
 		var tone := 0.62 if k < -0.1 else (0.86 if k < 0.45 else 1.08)
-		var c := Color(0.86, 0.8, 0.7) * tone
+		var c := Color(0.78, 0.77, 0.74) * tone
+		c.a = 0.75
 		if moss and n.y > 0.55:
 			c = Color(0.55, 0.78, 0.3) * (0.9 + 0.15 * n.y)
-		c.a = 0.0
+			c.a = 1.0
 		var uv := []
 		var a := n.abs()
 		for q: Vector3 in p:
@@ -400,14 +401,14 @@ static func flower_tuft(variant: int) -> ArrayMesh:
 		_tri(st, [base - side, base + side, tip], [Vector3.UP, Vector3.UP, Vector3.UP], [stem, stem, stem_tip], [Vector2(0, 0), Vector2(0, 0), Vector2(1, 0)], side.cross(Vector3.UP))
 		var petal: Color = colours[(variant + k) % colours.size()]
 		petal.a = 1.0
-		_flower_head(st, tip, 0.06 + _rand(variant, 100 + k) * 0.03, petal)
+		_flower_head(st, tip, 0.085 + _rand(variant, 100 + k) * 0.035, petal)
 	return _commit([st])
 
 
 ## Crossed-quad blades rising from the origin. UV.x = sway weight (0 at the root).
 static func _blades(st: SurfaceTool, variant: int, count: int, min_h: float, max_h: float) -> void:
-	var root := Color(0.2, 0.45, 0.16)
-	var tip := Color(0.62, 0.86, 0.32)
+	var root := Color(0.17, 0.36, 0.14)
+	var tip := Color(0.52, 0.72, 0.3)
 	for i in count:
 		var ang := TAU * _rand(variant, i)
 		var dist := _rand(variant, 100 + i) * 0.18

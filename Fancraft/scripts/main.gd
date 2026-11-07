@@ -37,7 +37,9 @@ func _ready() -> void:
 	terrain.setup(SEED, player)
 	terrain.set_sun(sun.global_transform.basis.z)  # direction towards the sun
 	PropMeshes.refresh_textures()
+	PartMeshes.refresh_textures()
 	Textures.textures_changed.connect(PropMeshes.refresh_textures)
+	Textures.textures_changed.connect(PartMeshes.refresh_textures)
 	vegetation = Vegetation.create(terrain.terrain)
 	player.position = _find_spawn(terrain.shape)
 	player.terrain = terrain
