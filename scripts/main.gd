@@ -38,3 +38,4 @@ func _ready() -> void:
 	add_child(canvas)
 	canvas.add_child(hud)
 	hud.setup(player)
+	hud.set_world_stats({"status": "VISUAL VOXELS ¼ · BUILD GRID 1 BLOCK"})

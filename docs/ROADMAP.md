@@ -10,14 +10,20 @@ Approved engine direction: Godot 4 with a native voxel module. Assess module com
 
 Primary performance validation device, as supplied by the creative director: Samsung Galaxy S26 Ultra, Snapdragon 8 Elite Gen 5 for Galaxy, 16 GB RAM, 1 TB storage. The earlier 12 GB reference describes another configuration; use the director's 16 GB model. This high-end target does not establish performance on midrange phones. Record OS, graphics backend, and actual rendering resolution during device testing.
 
+## Visual and building scale
+
+Approved: smaller cubes add visual appearance; decorative quarter-unit detail does not create individually editable simulation cells. Later building should support full, half, and quarter-block pieces with correct snapping and matching collision. Implement fractional building as a separately validated increment after basic block placement, rather than assuming visual mesh detail supplies editing behavior.
+
 ## Increments
 
 | Job | Deliverable | Completion evidence |
 | --- | --- | --- |
 | 00 | Direction, roadmap, and job handoff | Documents committed and pushed |
 | 01 | Android foundation and profiling | Reproducible debug APK build, minimal terrain scene, touch movement/look, frame-time instrumentation; device installation reported separately |
+| 01c | Visual quarter-voxel experiment | Bounded native detail, shared meshes, control regressions and updated Android APK; new phone result pending |
 | 02 | Streamed voxel world | Seeded terrain, background generation/meshing, bounded queues and memory, selectable distance; traversal and boundary tests |
 | 03 | Interactive sandbox | Block selection, removal/placement, collision, local world saves; edits survive restart |
+| 03b | Fractional building pieces | Half/quarter pieces, snapping, orientation, collision and save/load tests |
 | 04 | Visual vertical slice | One polished biome, original material palette, sky, skylight, ambient occlusion, fog, fantasy accents; reference captures and measured graphics cost |
 | 05 | Sustained mobile performance | Profile target phone, tune distance/resolution/effects, test thermal stability and streaming; publish device-specific results |
 | 06 | Exploration alpha | Additional biomes, caves, restrained water/foliage, sound, settings, pause/resume; Android regression pass |

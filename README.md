@@ -34,3 +34,9 @@ Job 01 contains a finite 96 × 96-block landscape, native greedy meshing, collis
 See [Job 01 validation](docs/VALIDATION-01.md) and [Job 02](docs/jobs/02-streamed-world.md).
 
 Controls regression checks: `./tools/godot.sh --headless --script res://tests/autojump.gd` and `./tools/godot.sh --headless --script res://tests/touch.gd`.
+
+## Visual quarter voxels (0.1.2)
+
+The current experiment adds quarter-block surface shading and native quarter-unit tree/ground meshes. It keeps full-block terrain/collision; tiny decorative cubes are not individually editable. Half- and quarter-block building pieces are planned separately. Details fade or cull at distance and shared meshes keep the number of scene objects bounded. See [representation and validation](docs/VALIDATION-01c.md).
+
+Run `./tools/godot.sh --headless --script res://tests/micro_details.gd` for native geometry/reuse/budget checks. New visuals require a fresh device FPS check; the 120 fps user report applies to the preceding versions.

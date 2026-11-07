@@ -4,6 +4,7 @@ const SIZE := 96
 const HEIGHT := 40
 var voxel_mesh: Mesh
 var generation_ms := 0.0
+var detail_stats: Dictionary = {}
 
 func elevation(x: int, z: int) -> int:
 	if abs(x) < 8 and abs(z) < 16:
@@ -23,20 +24,8 @@ func _ready() -> void:
 				if y == h and h < 4:
 					color = Color("cfb88a")
 				buffer.set_voxel(color.to_rgba32(), x + 1, y + 1, z + 1, VoxelBuffer.CHANNEL_COLOR)
-	# Small grove with warm trunks and cool fantasy foliage, all part of the native mesh.
-	for point in [Vector2i(-13,-12), Vector2i(13,-18), Vector2i(20,2), Vector2i(-20,10), Vector2i(-6,-27)]:
-		var base := elevation(point.x, point.y) + 1
-		for y in range(5):
-			buffer.set_voxel(Color("795238").to_rgba32(), point.x + 49, base + y + 1, point.y + 49, VoxelBuffer.CHANNEL_COLOR)
-		for dz in range(-3,4):
-			for dx in range(-3,4):
-				for dy in range(3):
-					if abs(dx) + abs(dz) < 5 - dy:
-						buffer.set_voxel(Color("488c83").to_rgba32(), point.x + dx + 49, base + dy + 5, point.y + dz + 49, VoxelBuffer.CHANNEL_COLOR)
-	var material := StandardMaterial3D.new()
-	material.vertex_color_use_as_albedo = true
-	material.vertex_color_is_srgb = true
-	material.roughness = 0.9
+	var material := ShaderMaterial.new()
+	material.shader = preload("res://shaders/voxel_surface.gdshader")
 	var mesher := VoxelMesherCubes.new()
 	mesher.greedy_meshing_enabled = true
 	voxel_mesh = mesher.build_mesh(buffer, [material])
@@ -46,5 +35,9 @@ func _ready() -> void:
 	instance.position = Vector3(-48, 0, -48)
 	add_child(instance)
 	instance.create_trimesh_collision()
+	var details := preload("res://scripts/micro_details.gd").new()
+	add_child(details)
+	detail_stats = details.populate(elevation)
+	print("DETAIL_READY ", detail_stats)
 	generation_ms = (Time.get_ticks_usec() - start) / 1000.0
 	print("TERRAIN_READY native=VoxelMesherCubes size=96x40x96 generation_ms=", generation_ms)
