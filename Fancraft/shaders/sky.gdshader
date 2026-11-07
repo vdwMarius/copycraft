@@ -3,8 +3,8 @@ shader_type sky;
 // No TIME: the radiance cubemap (ambient + reflections) only needs to update when
 // uniforms change, which keeps it cheap on phones.
 
-uniform vec3 zenith : source_color = vec3(0.16, 0.38, 0.78);
-uniform vec3 horizon : source_color = vec3(0.72, 0.85, 0.97);
+uniform vec3 zenith : source_color = vec3(0.12, 0.42, 0.86);
+uniform vec3 horizon : source_color = vec3(0.62, 0.86, 0.98);
 uniform vec3 ground : source_color = vec3(0.36, 0.42, 0.46);
 uniform vec3 sun_tint : source_color = vec3(1.0, 0.86, 0.62);
 uniform vec3 cloud_light : source_color = vec3(1.0, 0.98, 0.95);

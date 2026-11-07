@@ -15,6 +15,7 @@ func _ready() -> void:
 	for i in 120:
 		await process_frame
 	var p: Player = main.player
+	Settings.set_value("render_distance", 4, false)
 	Settings.set_value("texture_resolution", 256, false)
 	Settings.set_value("parallax", 2, false)
 	await Textures.textures_changed

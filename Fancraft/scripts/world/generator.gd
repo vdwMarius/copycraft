@@ -145,13 +145,16 @@ func _decorate(chunk: Chunk, heights: PackedFloat32Array) -> void:
 	var ox := chunk.coord.x * 16
 	var oy := chunk.coord.y * 16
 	var oz := chunk.coord.z * 16
-	# Trees can overhang from neighbouring columns: scan a 2-block margin.
-	for z in range(-2, 18):
-		for x in range(-2, 18):
+	# Tree canopies can overhang from neighbouring columns: scan a 4-block margin.
+	for z in range(-4, 20):
+		for x in range(-4, 20):
 			var wx := ox + x
 			var wz := oz + z
 			var r := rand01(wx, 7, wz, seed_value)
-			var hf := heights[(x + 2) + (z + 2) * 20]
+			if r >= 0.0175:
+				continue
+			var inner := x >= -2 and x < 18 and z >= -2 and z < 18
+			var hf := heights[(x + 2) + (z + 2) * 20] if inner else height_at(wx, wz)
 			var top := int(floor(hf))
 			if top <= WATER_LEVEL + 1 or top >= SNOW_LINE - 2:
 				continue
@@ -175,20 +178,72 @@ func _set_block_if_air(chunk: Chunk, x: int, y: int, z: int, id: int, replace_le
 
 
 func _tree(chunk: Chunk, x: int, base_y: int, z: int, wx: int, wz: int) -> void:
+	# Three silhouettes from the tree concept sheet: round broadleaf, tall conifer, bush.
+	var kind := rand01(wx, 13, wz, seed_value)
+	var jitter := func(k: int) -> float: return rand01(wx, 20 + k, wz, seed_value) - 0.5
+	var c := Vector3(x + 0.5, base_y, z + 0.5)
+	if kind < 0.18:
+		_blob(chunk, c + Vector3(0, 0.6, 0), 1.6 + jitter.call(0) * 0.4, LEAVES)
+		return
+	if kind < 0.45:
+		var h := 7 + int(rand01(wx, 9, wz, seed_value) * 4.0)
+		for i in h:
+			_set_block_if_air(chunk, x, base_y + i, z, LOG, true)
+		# Stacked shrinking tiers make the cone.
+		var tiers := 4
+		for t in tiers:
+			var ty := base_y + 3.0 + t * (h - 2.5) / tiers
+			_blob(chunk, Vector3(c.x, ty, c.z), 2.6 - t * 0.55, LEAVES, 0.75)
+		return
 	var height := 4 + int(rand01(wx, 9, wz, seed_value) * 3.0)
 	for i in height:
 		_set_block_if_air(chunk, x, base_y + i, z, LOG, true)
-	var cy := base_y + height - 1
-	for dy in range(-2, 3):
-		var rad := 2 if dy <= 0 else 1
-		for dz in range(-rad, rad + 1):
-			for dx in range(-rad, rad + 1):
-				if dx == 0 and dz == 0 and dy <= 0:
+	var top := Vector3(c.x, base_y + height, c.z)
+	_blob(chunk, top + Vector3(0, -0.4, 0), 2.7 + jitter.call(1) * 0.6, LEAVES)
+	for k in 3:
+		var a: float = TAU * (k / 3.0 + jitter.call(2 + k) * 0.2)
+		var off := Vector3(cos(a) * 1.9, -0.9 + float(jitter.call(5 + k)) * 1.2, sin(a) * 1.9)
+		_blob(chunk, top + off, 1.7 + jitter.call(8 + k) * 0.5, LEAVES)
+
+
+## Fill an (optionally squashed) sphere with `id` into air. Interior cells are written as
+## whole blocks; cells on the surface are sculpted at quarter-block resolution, which
+## gives rounded, clumpy canopies without paying for detail inside.
+func _blob(chunk: Chunk, centre: Vector3, radius: float, id: int, y_scale := 1.0) -> void:
+	var r2 := radius * radius
+	var lo := (centre - Vector3(radius, radius * y_scale, radius)).floor()
+	var hi := (centre + Vector3(radius, radius * y_scale, radius)).ceil()
+	for by in range(maxi(int(lo.y), 0), mini(int(hi.y), 16)):
+		for bz in range(maxi(int(lo.z), 0), mini(int(hi.z), 16)):
+			for bx in range(maxi(int(lo.x), 0), mini(int(hi.x), 16)):
+				var inside := 0
+				for corner in 8:
+					var p := Vector3(bx + (corner & 1), by + ((corner >> 1) & 1), bz + ((corner >> 2) & 1)) - centre
+					p.y /= y_scale
+					if p.length_squared() <= r2:
+						inside += 1
+				if inside == 0:
 					continue
-				var corner := absi(dx) == rad and absi(dz) == rad
-				if corner and rand01(wx + dx, cy + dy, wz + dz, seed_value) < 0.6:
+				var ci := Chunk.index(bx, by, bz)
+				var cur := chunk.cells[ci]
+				if inside == 8:
+					if cur == 0:
+						chunk.cells[ci] = id
 					continue
-				_set_block_if_air(chunk, x + dx, cy + dy, z + dz, LEAVES)
+				if cur != 0 and cur != Chunk.DETAIL:
+					continue
+				for sy in 4:
+					for sz in 4:
+						for sx in 4:
+							var p := Vector3(bx + (sx + 0.5) * 0.25, by + (sy + 0.5) * 0.25, bz + (sz + 0.5) * 0.25) - centre
+							p.y /= y_scale
+							if p.length_squared() <= r2:
+								var mx := bx * 4 + sx
+								var my := by * 4 + sy
+								var mz := bz * 4 + sz
+								if chunk.get_micro(mx, my, mz) == 0:
+									chunk.set_micro(mx, my, mz, id)
+				chunk.compact_cell(ci)
 
 
 ## A mossy boulder made of quarter cells, sitting on the exact surface height.

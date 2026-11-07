@@ -122,9 +122,7 @@ void fragment() {
 	ALBEDO = alb.rgb * cavity * shade * mix(1.0, ao, 0.55);
 	AO = ao;
 	AO_LIGHT_AFFECT = 0.35;
-	// Soft rim sheen on edges facing away from the camera: a stylised "pop".
-	RIM = 0.22;
-	RIM_TINT = 0.6;
+
 	NORMAL = normalize((VIEW_MATRIX * vec4(wn, 0.0)).xyz);
 	ROUGHNESS = surf.b;
 	SPECULAR = 0.45;
@@ -145,3 +143,32 @@ void fragment() {
 	}
 #endif
 }
+
+#ifndef PASS_TRANSLUCENT
+// Cel-shaded lighting to match the painted art direction: sunlight resolves into a lit
+// band and a shade band with a soft (not hard) boundary, shadows keep their crisp edge,
+// highlights are small bright toon spots, and a thin rim catches the sky colour.
+uniform float toon_softness = 0.08;
+uniform float shade_level = 0.38;
+
+void light() {
+	float ndl = dot(NORMAL, LIGHT);
+	float wrap = ndl * 0.5 + 0.5;
+	float lit = mix(shade_level, 1.0, smoothstep(0.5 - toon_softness, 0.5 + toon_softness, wrap));
+	lit = mix(lit, 1.12, smoothstep(0.82, 0.9, wrap) * 0.6);   // top-lit faces get a painted highlight band
+	float shadow = mix(shade_level, 1.0, ATTENUATION);
+	vec3 diffuse = LIGHT_COLOR * min(lit, shadow) / PI;
+#ifdef PASS_CUTOUT
+	// Leaves: sunlight glows through from behind.
+	diffuse += LIGHT_COLOR * ALBEDO * max(-ndl, 0.0) * 0.35 * ATTENUATION / PI;
+#endif
+	DIFFUSE_LIGHT += diffuse;
+	vec3 H = normalize(VIEW + LIGHT);
+	float gloss = 1.0 - ROUGHNESS;
+	float spec = pow(max(dot(NORMAL, H), 0.0), mix(12.0, 160.0, gloss));
+	spec = smoothstep(0.45, 0.55, spec) * gloss * gloss;
+	SPECULAR_LIGHT += LIGHT_COLOR * spec * ATTENUATION * 0.6 / PI;
+	float rim = smoothstep(0.62, 0.78, 1.0 - max(dot(NORMAL, VIEW), 0.0)) * max(ndl, 0.0);
+	DIFFUSE_LIGHT += LIGHT_COLOR * rim * 0.18 / PI;
+}
+#endif

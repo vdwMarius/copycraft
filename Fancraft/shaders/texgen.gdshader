@@ -225,95 +225,196 @@ vec3 hang_blades(vec2 uv, float n, float y0, float len, float seed) {
 }
 
 // ---------------------------------------------------------------- materials
+// Cel-shaded, hand-painted style: flat tones per shape, thin warm-dark outlines,
+// linear chamfers that the light pass (see fragment) turns into crisp highlight /
+// shadow bands, and chipped corners on cut stone.
+
+const vec3 OUTLINE = vec3(0.20, 0.15, 0.13);
+
+float chamfer(float d, float w) {
+	return clamp(d / w, 0.0, 1.0);
+}
+
+// Pick one of four palette entries by a random id.
+vec3 pick4(vec3 a, vec3 b, vec3 c, vec3 d, float t) {
+	return t < 0.25 ? a : (t < 0.5 ? b : (t < 0.75 ? c : d));
+}
+
+// Rows of cut blocks with random widths, optional stacked halves and chipped corners.
+// Returns x = distance to the block outline (uv units), y = block id.
+vec2 ashlar(vec2 uv, float rows, float seed) {
+	float r = floor(uv.y * rows);
+	float rr = mod(r, rows);
+	float ly = fract(uv.y * rows);
+	float n = 1.0 + floor(hash21(vec2(rr, seed)) * 2.99);
+	float off = hash21(vec2(rr, seed + 1.0));
+	float sx = fract(uv.x - off) * n;
+	float j = floor(sx);
+	float lx = fract(sx);
+	float bid = hash21(vec2(rr * 7.0 + j, seed + 2.0));
+	float bw = 1.0 / n;
+	float bh = 1.0 / rows;
+	float dy0 = ly * bh;
+	float dy1 = (1.0 - ly) * bh;
+	if (bid > 0.7) {
+		// stacked half-height blocks
+		float hh = step(0.5, ly);
+		float l2 = fract(ly * 2.0);
+		dy0 = l2 * bh * 0.5;
+		dy1 = (1.0 - l2) * bh * 0.5;
+		bid = hash21(vec2(bid * 31.0 + hh, seed + 3.0));
+	}
+	float dx0 = lx * bw;
+	float dx1 = (1.0 - lx) * bw;
+	float cx = min(dx0, dx1);
+	float cy = min(dy0, dy1);
+	float ci = (dx0 < dx1 ? 0.0 : 1.0) + (dy0 < dy1 ? 0.0 : 2.0);
+	float c = hash21(vec2(bid * 13.0 + ci, seed + 5.0));
+	float chip = c > 0.55 ? 0.025 + (c - 0.55) * 0.16 : 0.012;
+	float ed = min(min(cx, cy), (cx + cy - chip) * 0.7071);
+	// hand-cut wobble on the outline
+	ed += (vnoise(uv * 24.0 + seed, vec2(24.0)) - 0.5) * 0.004;
+	return vec2(ed, bid);
+}
+
+// Crisp painterly patch mask (two flat tones instead of a gradient).
+float patch(vec2 uv, float n, float thr, float seed) {
+	return edge((fbm(uv + seed, n, 3) - thr) * 0.5);
+}
+
+// Thin dark crack lines inside a fraction of the shapes.
+float cracks(vec2 uv, float n, float chance, float id, float seed) {
+	vec2 rel;
+	vec2 w = uv + 0.06 * vec2(fbm(uv + seed, 4.0, 2), fbm(uv + seed + 0.5, 4.0, 2));
+	vec4 c = voro(w, vec2(n), 1.0, rel);
+	float line = 1.0 - edge(c.y / n - px() * 0.55);
+	float mask = step(1.0 - chance, fract(id * 7.31 + c.z * 0.37)) * edge((fbm(uv + id, 5.0, 2) - 0.5) * 0.1);
+	return line * mask;
+}
+
+// Shared cut-stone renderer. palette: 4 colours; rows of blocks.
+void cut_stone(vec2 uv, float rows, float seed, vec3 p0, vec3 p1, vec3 p2, vec3 p3, out vec3 col, out float h, out float ed, out float bid) {
+	vec2 a = ashlar(uv, rows, seed);
+	ed = a.x;
+	bid = a.y;
+	float lw = res <= 32.0 ? px() * 0.45 : 0.0035 + px() * 0.6;
+	float inside = edge(ed - lw);
+	float ch = chamfer(ed - lw, res <= 32.0 ? 0.06 : 0.03);
+	float cr = cracks(uv, 6.0, 0.35, bid, seed);
+	float g = grain(uv, seed);
+	h = inside * (0.5 + 0.4 * ch + 0.03 * g) - 0.18 * cr;
+	vec3 base = pick4(p0, p1, p2, p3, bid);
+	base *= mix(1.0, 0.93, patch(uv, 5.0, 0.58, bid * 3.0));
+	base *= 1.0 + 0.05 * g;
+	col = mix(OUTLINE, base, inside);
+	col = mix(col, OUTLINE * 1.3, cr * 0.85);
+}
+
+// Rounded scalloped clumps (leaves, dirt clods). x = height, y = id,
+// z = distance to rim (uv), w = how much the point faces the top-left light (-1..1).
+vec4 clumps(vec2 uv, float n, float radius, float base_h, float seed) {
+	vec2 p = uv * n;
+	vec2 i = floor(p);
+	vec4 best = vec4(0.0, 0.0, -1.0, 0.0);
+	for (int y = -1; y <= 1; y++) {
+		for (int x = -1; x <= 1; x++) {
+			vec2 g = vec2(float(x), float(y));
+			vec2 c = mod(i + g, vec2(n));
+			vec2 ctr = i + g + 0.2 + 0.6 * hash22(c + seed);
+			vec2 q = p - ctr;
+			float ang = atan(q.y, q.x);
+			float hr = hash21(c + seed * 1.7);
+			float rr = radius * (0.8 + 0.4 * hr) * (0.95 + 0.05 * cos(ang * 6.0 + hr * 20.0));
+			float d = rr - length(q);
+			if (d > -0.05) {
+				float dome = sqrt(clamp(d / rr, 0.0, 1.0));
+				float hh = (base_h + 0.3 * dome + 0.1 * hr) * edge(d / n);
+				if (hh > best.x) {
+					best = vec4(hh, hr, d / n, dot(q / rr, vec2(-0.7071, -0.7071)));
+				}
+			}
+		}
+	}
+	return best;
+}
+
+// Blade tufts with a density control.
+vec3 tufts(vec2 uv, float n, vec2 size, float density, float seed) {
+	vec2 p = uv * n;
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	vec3 best = vec3(0.0);
+	for (int y = -1; y <= 1; y++) {
+		for (int x = -1; x <= 1; x++) {
+			vec2 g = vec2(float(x), float(y));
+			vec2 c = mod(i + g, vec2(n));
+			if (hash21(c + seed * 3.3) > density) {
+				continue;
+			}
+			vec2 root = g + hash22(c + seed) - f;
+			// three blades fanning out of one root
+			for (int k = 0; k < 3; k++) {
+				float a = -1.5708 + (float(k) - 1.0) * 0.55 + (hash21(c + seed + float(k)) - 0.5) * 0.5;
+				vec2 q = rot(-root, -a);
+				float t = q.x / (size.x * (0.7 + 0.3 * float(k == 1)));
+				if (t > 0.0 && t < 1.0) {
+					float w = size.y * (1.0 - t);
+					float cov = edge((w - abs(q.y)) / n);
+					float hh = cov * (0.5 + 0.5 * t);
+					if (hh > best.x) {
+						best = vec3(hh, hash21(c + seed * 2.1), t);
+					}
+				}
+			}
+		}
+	}
+	return best;
+}
 
 void dirt_mat(vec2 uv, out vec3 col, out float h) {
-	vec2 rel;
-	vec4 v = voro(uv, vec2(5.0), 1.0, rel);
-	float clod = bevel(v.y - 0.03, 0.14);
-	float crack = (1.0 - edge(v.y / 5.0 - 0.004 - px() * 0.5)) * smoothstep(0.52, 0.6, fbm(uv + 0.2, 4.0, 3));
-	float wash = fbm(uv, 3.0, 3);
-	h = 0.22 + 0.3 * clod + 0.08 * wash + 0.05 * grain(uv, 1.0) - 0.2 * crack;
-	col = ramp3(vec3(0.20, 0.12, 0.07), vec3(0.38, 0.24, 0.13), vec3(0.52, 0.36, 0.20), clod * 0.7 + v.z * 0.3);
-	col *= mix(vec3(0.95, 1.0, 1.05), vec3(1.08, 1.0, 0.92), wash);
-	col = mix(col, vec3(0.13, 0.07, 0.04), crack);
-	vec2 prel;
-	vec4 pv = voro(uv + 0.37, vec2(11.0), 1.0, prel);
-	if (pv.z > 0.86) {
-		float pr = (0.26 + 0.12 * fract(pv.z * 7.0)) - length(prel);
-		float cov = edge(pr / 11.0);
-		float dome = sqrt(clamp(pr / 0.25, 0.0, 1.0));
-		vec3 pc = mix(vec3(0.50, 0.46, 0.42), vec3(0.70, 0.64, 0.55), fract(pv.z * 13.0));
-		col = mix(col, pc * (0.75 + 0.3 * dome), cov);
-		h = mix(h, 0.55 + 0.4 * dome, cov);
-	}
-	vec3 s = dots(uv, 16.0, 0.25, 0.12, 4.0);
-	col = mix(col, col * 1.35, s.x * 0.6);
+	vec3 base = mix(vec3(0.56, 0.36, 0.21), vec3(0.51, 0.32, 0.19), patch(uv, 3.0, 0.55, 3.0));
+	vec4 c1 = clumps(uv, 3.0, 0.62, 0.3, 91.0);
+	vec4 c2 = clumps(uv + 0.29, 5.0, 0.55, 0.36, 92.0);
+	vec4 best = c1.x >= c2.x ? c1 : c2;
+	float g = grain(uv, 1.0);
+	h = 0.25 + 0.6 * best.x + 0.03 * g;
+	vec3 cc = mix(vec3(0.58, 0.38, 0.22), vec3(0.53, 0.34, 0.20), best.y);
+	float lit = edge((best.w - 0.3) * 0.25) * step(0.0, best.z);
+	float shad = edge((-0.5 - best.w) * 0.25) * step(0.0, best.z);
+	cc = mix(mix(cc, cc * vec3(1.14, 1.1, 1.04), lit), cc * vec3(0.8, 0.78, 0.82), shad);
+	col = mix(base * 0.88, cc, edge(best.z));
+	float rimline = (1.0 - edge(best.z - 0.004 - px() * 0.5)) * edge(best.z + 0.004) * step(0.6, fract(best.y * 5.0));
+	col = mix(col, vec3(0.34, 0.20, 0.12), rimline * 0.8);
+	col *= 1.0 + 0.04 * g;
+	vec3 pb = dots(uv, 6.0, 0.22, 0.18, 4.0);
+	vec3 pc = mix(vec3(0.72, 0.64, 0.54), vec3(0.62, 0.57, 0.52), step(0.5, pb.z));
+	col = mix(col, mix(vec3(0.30, 0.20, 0.14), pc, edge(pb.y - 0.25)), pb.x);
+	h = mix(h, 0.6 + 0.3 * pb.y, pb.x);
+	vec3 s = dots(uv, 18.0, 0.25, 0.1, 5.0);
+	col = mix(col, vec3(0.42, 0.26, 0.15), s.x * 0.7);
 }
 
 void grass_top_mat(vec2 uv, out vec3 col, out float h) {
-	// Shadowed soil between blades.
-	float wash = fbm(uv, 2.0, 3);
-	col = mix(vec3(0.07, 0.17, 0.05), vec3(0.12, 0.24, 0.06), wash);
-	h = 0.12 + 0.05 * wash;
-	vec3 layers[3];
-	layers[0] = blades(uv, 6.0, vec2(1.25, 0.2), 0.0, TAU, 1.0);
-	layers[1] = blades(uv, 9.0, vec2(1.15, 0.17), 0.0, TAU, 2.0);
-	layers[2] = blades(uv, 13.0, vec2(1.05, 0.15), 0.0, TAU, 3.0);
-	for (int k = 0; k < 3; k++) {
-		vec3 b = layers[k];
-		if (b.x <= 0.0) {
-			continue;
-		}
-		float bh = 0.3 + 0.2 * float(k) + 0.45 * b.x;
-		if (bh > h) {
-			h = bh;
-			float tone = clamp(b.z * 0.8 + float(k) * 0.12 + (b.y - 0.5) * 0.3, 0.0, 1.0);
-			vec3 c = ramp3(vec3(0.13, 0.33, 0.07), vec3(0.30, 0.58, 0.12), vec3(0.62, 0.84, 0.30), tone);
-			c *= mix(vec3(1.08, 1.0, 0.82), vec3(0.88, 1.0, 1.08), b.y);
-			col = c;
-		}
+	vec3 lime = vec3(0.56, 0.80, 0.23);
+	vec3 mid = vec3(0.46, 0.71, 0.19);
+	col = mix(lime, mid, patch(uv, 3.0, 0.55, 7.0));
+	h = 0.42 + 0.03 * fbm(uv, 4.0, 2);
+	vec3 t1 = tufts(uv, 7.0, vec2(0.8, 0.13), 0.6, 61.0);
+	vec3 t2 = tufts(uv + 0.31, 11.0, vec2(0.7, 0.12), 0.45, 62.0);
+	if (t1.x > 0.0) {
+		col = mix(col, mix(vec3(0.38, 0.64, 0.16), vec3(0.62, 0.86, 0.30), step(0.6, t1.z)), t1.x > 0.3 ? 1.0 : t1.x / 0.3);
+		h = max(h, 0.45 + 0.12 * t1.x);
 	}
-	// Tiny flowers.
-	vec2 p = uv * 6.0;
-	vec2 cell = floor(p);
-	float fh = hash21(mod(cell, vec2(6.0)) + 77.0);
-	if (fh > 0.82) {
-		vec2 q = fract(p) - 0.5 - (hash22(mod(cell, vec2(6.0)) + 5.0) - 0.5) * 0.4;
-		float r = length(q);
-		float ang = atan(q.y, q.x) + fh * 10.0;
-		float petal = 0.13 * (0.55 + 0.45 * cos(5.0 * ang)) - r;
-		float cov = edge(petal / 6.0);
-		vec3 pc = fh > 0.92 ? vec3(1.0, 0.86, 0.32) : (fh > 0.87 ? vec3(0.95, 0.5, 0.78) : vec3(0.96, 0.96, 1.0));
-		col = mix(col, pc * (0.8 + 0.25 * (1.0 - r * 6.0)), cov);
-		float centre = edge((0.035 - r) / 6.0);
-		col = mix(col, vec3(1.0, 0.75, 0.2), centre);
-		h = mix(h, 1.0, cov);
+	if (t2.x > 0.0) {
+		col = mix(col, vec3(0.33, 0.58, 0.14), (t2.x > 0.3 ? 1.0 : t2.x / 0.3) * 0.85);
+		h = max(h, 0.44 + 0.08 * t2.x);
 	}
-	col *= 1.0 + 0.08 * grain(uv, 2.0);
-}
-
-void stone_plates(vec2 uv, float n, out vec3 col, out float h, out float ed_uv, out float id) {
-	vec2 rel;
-	vec4 v = voro(uv, vec2(n), 0.75, rel);
-	ed_uv = v.y / n;
-	id = v.z;
-	float cw = 0.010 + px() * 0.6;
-	float inside = edge(ed_uv - cw);
-	float bev = bevel(ed_uv - cw, 0.05);
-	float ang = id * TAU;
-	float tilt = dot(rel, vec2(cos(ang), sin(ang))) * 0.12;
-	vec2 crel;
-	vec4 c = voro(uv + 0.11 * vec2(fbm(uv, 4.0, 2), fbm(uv + 0.5, 4.0, 2)), vec2(n * 3.0), 1.0, crel);
-	float crack_mask = step(0.55, fract(id * 5.31)) * smoothstep(0.45, 0.55, fbm(uv + id, 5.0, 2));
-	float crack = (1.0 - edge(c.y / (n * 3.0) - px() * 0.5)) * crack_mask * inside;
-	float g = grain(uv, 3.0);
-	h = inside * (0.5 + 0.38 * bev + tilt + 0.06 * g) - 0.3 * crack;
-	float wash = fbm(uv, 3.0, 3);
-	col = ramp3(vec3(0.36, 0.38, 0.43), vec3(0.52, 0.53, 0.55), vec3(0.66, 0.64, 0.60), id * 0.6 + wash * 0.5);
-	col *= 1.0 + 0.1 * g;
-	col = mix(col, col * vec3(1.06, 1.02, 0.94), smoothstep(0.55, 0.75, wash));
-	col = mix(vec3(0.10, 0.10, 0.13), col, inside);
-	col = mix(col, vec3(0.16, 0.16, 0.19), crack);
+	// flower specks
+	vec3 fl = dots(uv, 6.0, 0.28, 0.1, 71.0);
+	vec3 fc = pick4(vec3(1.0, 0.55, 0.15), vec3(1.0, 0.85, 0.25), vec3(0.97, 0.97, 0.92), vec3(0.62, 0.48, 0.95), fl.z);
+	col = mix(col, fc * mix(0.85, 1.05, fl.y), fl.x);
+	h = mix(h, 0.6, fl.x);
+	col *= 1.0 + 0.04 * grain(uv, 2.0);
 }
 
 void mat(int id, vec2 uv, out vec3 col, out float h, out float r, out float a) {
@@ -322,122 +423,109 @@ void mat(int id, vec2 uv, out vec3 col, out float h, out float r, out float a) {
 	h = 0.5;
 	r = 0.85;
 	a = 1.0;
+	float ed;
+	float bid;
 	if (id == 0) { // grass_top
 		grass_top_mat(uv, col, h);
-		r = 0.8;
+		r = 0.85;
 	} else if (id == 1) { // grass_side
 		dirt_mat(uv, col, h);
-		h *= 0.8;
-		float lip = 0.10 + 0.02 * sin(TAU * uv.x * 3.0 + 0.4) + 0.012 * sin(TAU * uv.x * 11.0);
-		vec3 b1 = hang_blades(uv, 9.0, 0.05, 0.34, 41.0);
-		vec3 b2 = hang_blades(uv + vec2(0.37, 0.0), 13.0, 0.06, 0.26, 42.0);
-		vec3 b3 = hang_blades(uv + vec2(0.71, 0.0), 19.0, 0.07, 0.17, 43.0);
-		vec3 b = b1;
-		float layer = 0.0;
-		if (b2.x * 1.04 > b.x) { b = b2; layer = 1.0; }
-		if (b3.x * 1.08 > b.x) { b = b3; layer = 2.0; }
+		h *= 0.85;
+		float lip = 0.20 + 0.025 * sin(TAU * uv.x * 2.0 + 0.4) + 0.015 * sin(TAU * uv.x * 7.0);
+		vec3 b1 = hang_blades(uv, 8.0, lip - 0.06, 0.20, 41.0);
+		vec3 b2 = hang_blades(uv + vec2(0.37, 0.0), 12.0, lip - 0.05, 0.15, 42.0);
+		vec3 b = b1.x >= b2.x ? b1 : b2;
 		float in_lip = edge(lip - uv.y);
-		float stroke_l = vnoise(vec2(uv.x * 40.0, uv.y * 8.0), vec2(40.0, 8.0));
-		float grass = max(in_lip, step(0.01, b.x));
-		// soil darkens just below the hanging grass (cast shadow)
-		float below = clamp(uv.y - lip, 0.0, 1.0);
-		float shade = 1.0 - 0.45 * (1.0 - smoothstep(0.0, 0.16, below)) * (1.0 - grass);
+		float grass = max(in_lip, edge(b.x - 0.01));
+		// silhouette distance for the dark outline under the grass
+		float under = clamp(uv.y - lip, 0.0, 1.0);
+		float shade = 1.0 - 0.4 * (1.0 - edge(under - 0.06)) * (1.0 - grass);
 		col *= shade;
-		h *= mix(0.7, 1.0, smoothstep(0.0, 0.16, below));
-		float tone = in_lip > 0.5 ? 0.62 - uv.y * 1.5 + 0.2 * (stroke_l - 0.5) : clamp(0.55 - b.z * 0.4 + layer * 0.1 + (b.y - 0.5) * 0.3, 0.0, 1.0);
-		vec3 gc = ramp3(vec3(0.12, 0.30, 0.06), vec3(0.28, 0.56, 0.12), vec3(0.58, 0.84, 0.28), tone);
-		gc *= mix(vec3(1.06, 1.0, 0.82), vec3(0.88, 1.0, 1.06), b.y);
-		float stroke = vnoise(vec2(uv.x * 64.0, uv.y * 6.0), vec2(64.0, 6.0));
-		gc *= (0.92 + 0.16 * stroke) * mix(1.0, 0.82, in_lip);
-		float gh = in_lip > 0.5 ? 0.92 : 0.7 + 0.25 * b.x;
+		vec3 gc = in_lip > 0.5 ? mix(vec3(0.56, 0.80, 0.23), vec3(0.45, 0.70, 0.19), edge(uv.y - (lip - 0.05))) : mix(vec3(0.42, 0.68, 0.18), vec3(0.32, 0.56, 0.14), step(0.55, b.z));
+		vec3 t = tufts(uv, 9.0, vec2(0.6, 0.12), 0.5, 44.0);
+		gc = mix(gc, vec3(0.38, 0.63, 0.16), (t.x > 0.3 ? 1.0 : t.x / 0.3) * in_lip * 0.8);
+		vec3 fl = dots(uv, 8.0, 0.2, 0.09, 72.0);
+		gc = mix(gc, pick4(vec3(1.0, 0.55, 0.15), vec3(1.0, 0.85, 0.25), vec3(0.97, 0.97, 0.92), vec3(0.62, 0.48, 0.95), fl.z), fl.x * step(uv.y, lip - 0.06));
+		float gh = in_lip > 0.5 ? 0.85 : 0.65 + 0.2 * b.x;
+		// outline: thin dark line just outside the grass silhouette
+		float outline = (1.0 - grass) * (1.0 - edge(under - 0.01 - px() * 0.6)) * step(0.0, uv.y - lip + 0.001);
+		col = mix(col, vec3(0.16, 0.28, 0.08), outline * 0.8);
 		col = mix(col, gc, grass);
 		h = mix(h, gh, grass);
-		r = 0.85;
+		r = 0.88;
 	} else if (id == 2) { // dirt
 		dirt_mat(uv, col, h);
 		r = 0.95;
-	} else if (id == 3) { // stone
-		float ed;
-		float sid;
-		stone_plates(uv, 3.0, col, h, ed, sid);
-		r = 0.72;
-	} else if (id == 4) { // cobblestone
+	} else if (id == 3) { // stone: chunky cool grey-brown cut blocks
+		cut_stone(uv, 3.0, 11.0, vec3(0.57, 0.53, 0.49), vec3(0.49, 0.46, 0.45), vec3(0.64, 0.58, 0.50), vec3(0.60, 0.47, 0.37), col, h, ed, bid);
+		r = 0.78;
+	} else if (id == 4) { // cobblestone: rounded irregular wall stones
 		vec2 rel;
-		vec4 v = voro(uv, vec2(4.0), 0.85, rel);
-		float ed = v.y / 4.0;
-		float mw = 0.018 + px() * 0.5;
-		float inside = edge(ed - mw);
-		float dome = sqrt(bevel(ed - mw, 0.12));
+		vec4 v = voro(uv, vec2(4.0), 0.7, rel);
+		ed = v.y / 4.0 + (vnoise(uv * 24.0, vec2(24.0)) - 0.5) * 0.006;
+		float lw = 0.008 + px() * 0.55;
+		float inside = edge(ed - lw);
+		float ch = sqrt(chamfer(ed - lw, 0.07));
 		float g = grain(uv, 5.0);
-		h = inside * (0.35 + 0.6 * dome * (0.85 + 0.15 * v.z) + 0.05 * g);
-		vec3 sc = ramp3(vec3(0.38, 0.39, 0.44), vec3(0.55, 0.54, 0.53), vec3(0.68, 0.63, 0.55), v.z);
-		sc = mix(sc, sc * vec3(1.1, 0.98, 0.85), step(0.8, fract(v.z * 7.0)) * 0.6);
-		sc *= 0.8 + 0.3 * dome + 0.1 * g;
-		vec3 s = dots(uv, 20.0, 0.3, 0.1, 9.0);
-		sc = mix(sc, sc * 0.75, s.x * 0.5);
-		col = mix(vec3(0.09, 0.09, 0.1), sc, inside);
-		r = 0.7;
+		h = inside * (0.45 + 0.45 * ch + 0.03 * g);
+		vec3 base = pick4(vec3(0.55, 0.50, 0.46), vec3(0.47, 0.44, 0.43), vec3(0.62, 0.53, 0.43), vec3(0.52, 0.48, 0.47), v.z);
+		base *= mix(1.0, 0.92, patch(uv, 6.0, 0.6, v.z * 5.0));
+		col = mix(OUTLINE, base * (1.0 + 0.05 * g), inside);
+		r = 0.75;
 	} else if (id == 5) { // sand
 		float warp = fbm(uv, 2.0, 3);
-		float ph = fract(uv.y * 5.0 + uv.x * 1.0 + warp * 1.2);
-		// asymmetric dune ripple: long gentle slope, short steep face
-		float ripple = ph < 0.8 ? ph / 0.8 : (1.0 - ph) / 0.2;
-		ripple = smoothstep(0.0, 1.0, ripple);
-		float g = grain(uv, 6.0);
-		h = 0.35 + 0.4 * ripple + 0.06 * g;
-		col = ramp3(vec3(0.78, 0.63, 0.40), vec3(0.90, 0.78, 0.53), vec3(0.98, 0.91, 0.70), ripple * 0.8 + warp * 0.3);
-		vec3 s = dots(uv, 18.0, 0.35, 0.1, 12.0);
-		col = mix(col, s.z > 0.5 ? vec3(0.62, 0.48, 0.32) : vec3(1.0, 0.97, 0.85), s.x * 0.7);
-		col *= 1.0 + 0.06 * g;
+		float ph = fract(uv.y * 4.0 + uv.x + warp * 1.2);
+		float ripple = ph < 0.75 ? ph / 0.75 : (1.0 - ph) / 0.25;
+		h = 0.45 + 0.12 * ripple + 0.03 * grain(uv, 6.0);
+		col = mix(vec3(0.93, 0.83, 0.60), vec3(0.86, 0.74, 0.52), patch(uv, 3.0, 0.58, 8.0));
+		col = mix(col, vec3(0.98, 0.91, 0.72), edge(ph - 0.68) * edge(0.76 - ph));
+		vec3 s = dots(uv, 16.0, 0.3, 0.1, 12.0);
+		col = mix(col, s.z > 0.5 ? vec3(0.70, 0.52, 0.34) : vec3(0.99, 0.95, 0.85), s.x * 0.8);
 		r = 0.92;
 	} else if (id == 6) { // log_top
 		vec2 c = uv - 0.5;
 		float ang = atan(c.y, c.x);
 		float rr = length(c) * 2.0;
-		float wob = 0.035 * (vnoise(vec2(ang / TAU * 7.0, 0.5), vec2(7.0, 1.0)) - 0.5);
+		float wob = 0.03 * (vnoise(vec2(ang / TAU * 7.0, 0.5), vec2(7.0, 1.0)) - 0.5);
 		float rw = rr + wob;
-		float bark_r = 0.86 + 0.04 * vnoise(vec2(ang / TAU * 11.0, 0.5), vec2(11.0, 1.0));
+		float bark_r = 0.84 + 0.04 * vnoise(vec2(ang / TAU * 11.0, 0.5), vec2(11.0, 1.0));
 		if (rr > bark_r) {
-			float plate = vnoise(vec2(ang / TAU * 20.0, 0.5), vec2(20.0, 1.0));
-			float groove = edge(fract(ang / TAU * 20.0 + plate * 0.4) - 0.12);
-			h = 0.5 + 0.35 * groove + 0.1 * plate;
-			col = mix(vec3(0.17, 0.10, 0.06), vec3(0.40, 0.27, 0.15), groove * (0.6 + 0.4 * plate));
+			float pl = fract(ang / TAU * 16.0 + vnoise(vec2(ang / TAU * 16.0, 0.5), vec2(16.0, 1.0)) * 0.4);
+			float plate = edge(pl - 0.1);
+			h = 0.55 + 0.3 * plate;
+			col = mix(vec3(0.24, 0.10, 0.08), vec3(0.52, 0.26, 0.20), plate);
 		} else {
-			float band = rw * (res <= 32.0 ? 4.0 : (res <= 64.0 ? 6.0 : 11.0));
-			float ring = edge(abs(fract(band) - 0.5) - 0.44);
-			float inner = fract(band) * 0.6 + 0.4 * mod(floor(band), 2.0);
-			h = 0.72 + 0.08 * inner - 0.2 * (1.0 - ring) - 0.25 * (1.0 - edge(bark_r - 0.035 - rr));
-			col = ramp3(vec3(0.62, 0.43, 0.24), vec3(0.78, 0.59, 0.36), vec3(0.88, 0.72, 0.48), inner * 0.6 + 0.4 * (1.0 - rr));
-			col = mix(vec3(0.45, 0.28, 0.15), col, ring);
-			// radial cracks and pith
-			float crack = (1.0 - edge(abs(fract(ang / TAU * 3.0 + 0.1) - 0.5) * rr * 2.0 - px() * 2.0)) * step(0.15, rr) * step(rr, 0.6);
-			col = mix(col, vec3(0.3, 0.18, 0.09), crack);
-			h -= 0.3 * crack;
+			float rings = res <= 32.0 ? 3.0 : (res <= 64.0 ? 5.0 : 8.0);
+			float band = rw * rings;
+			float ring = 1.0 - edge(abs(fract(band) - 0.5) - 0.5 + 0.06 + px() * 0.5);
+			float alt = mod(floor(band), 2.0);
+			h = 0.75 - 0.06 * alt - 0.12 * ring;
+			col = mix(vec3(0.82, 0.64, 0.43), vec3(0.75, 0.55, 0.36), alt);
+			col = mix(col, vec3(0.55, 0.34, 0.20), ring);
+			float rim = 1.0 - edge(bark_r - 0.03 - rr);
+			col = mix(col, OUTLINE, rim);
+			h -= 0.3 * rim;
 			float pith = 1.0 - edge(rr - 0.05);
-			col = mix(col, vec3(0.42, 0.26, 0.13), pith);
-			col = mix(col, col * 0.6, 1.0 - edge(bark_r - 0.035 - rr));
-			col *= 1.0 + 0.08 * grain(uv, 7.0);
+			col = mix(col, vec3(0.50, 0.30, 0.17), pith);
 		}
-		r = 0.8;
-	} else if (id == 7) { // log_side
+		r = 0.85;
+	} else if (id == 7) { // log_side: reddish-brown bark plates with dark line work
 		vec2 rel;
 		vec2 wuv = uv + vec2(0.04 * (fbm(vec2(uv.y * 2.0, uv.x), 3.0, 2) - 0.5), 0.0);
-		float bn = res <= 32.0 ? 4.0 : 8.0;
+		float bn = res <= 32.0 ? 4.0 : 7.0;
 		vec4 v = voro(wuv, vec2(bn, res <= 32.0 ? 2.0 : 3.0), 1.0, rel);
-		float ed = v.y / bn;
-		float gw = 0.007 + px() * 0.5;
-		float inside = edge(ed - gw);
-		float plate = bevel(ed - gw, 0.035);
-		float lines = vnoise(vec2(uv.x * 40.0, uv.y * 3.0 + v.z * 5.0), vec2(40.0, 3.0));
-		float fib = edge(lines - 0.62) * 0.35;
-		float g = grain(uv, 8.0);
-		h = inside * (0.35 + 0.55 * plate - 0.12 * fib + 0.05 * g);
-		col = ramp3(vec3(0.22, 0.13, 0.07), vec3(0.40, 0.26, 0.14), vec3(0.56, 0.40, 0.24), plate * 0.6 + v.z * 0.4);
-		col = mix(col, col * 0.72, fib);
-		col *= 1.0 + 0.08 * g;
-		col = mix(vec3(0.10, 0.06, 0.03), col, inside);
-		r = 0.92;
-	} else if (id == 8) { // planks
+		ed = v.y / bn;
+		float lw = 0.006 + px() * 0.55;
+		float inside = edge(ed - lw);
+		float ch = chamfer(ed - lw, 0.03);
+		float stroke = vnoise(vec2(uv.x * 36.0, uv.y * 3.0 + v.z * 5.0), vec2(36.0, 3.0));
+		float fib = edge((stroke - 0.66) * 0.1) * 0.6;
+		h = inside * (0.45 + 0.4 * ch - 0.08 * fib);
+		vec3 base = pick4(vec3(0.50, 0.25, 0.19), vec3(0.46, 0.22, 0.18), vec3(0.55, 0.29, 0.21), vec3(0.48, 0.24, 0.20), v.z);
+		base = mix(base, base * 0.78, fib);
+		col = mix(vec3(0.20, 0.08, 0.07), base, inside);
+		r = 0.9;
+	} else if (id == 8) { // planks: warm wood boards with dark seams
 		float b = floor(uv.y * 4.0);
 		float lv = fract(uv.y * 4.0);
 		float off = hash21(vec2(b, 3.0));
@@ -445,192 +533,184 @@ void mat(int id, vec2 uv, out vec3 col, out float h, out float r, out float a) {
 		float dy = min(lv, 1.0 - lv) / 4.0;
 		float dx = min(sx, 1.0 - sx);
 		float e = min(dy, dx);
-		float gw = 0.006 + px() * 0.6;
-		float inside = edge(e - gw);
-		float bev = bevel(e - gw, 0.025);
+		float lw = 0.006 + px() * 0.6;
+		float inside = edge(e - lw);
+		float ch = chamfer(e - lw, 0.02);
 		float warp = fbm(vec2(sx * 2.0, lv), 2.0, 2);
-		float gl = fract(lv * 3.0 + warp * 1.6 + sin(sx * TAU * 2.0 + off * 9.0) * 0.12);
-		float grain_line = 1.0 - edge(abs(gl - 0.5) - 0.06 - px() * 2.0);
+		float gl = fract(lv * 3.0 + warp * 1.4 + sin(sx * TAU * 2.0 + off * 9.0) * 0.1);
+		float grain_line = 1.0 - edge(abs(gl - 0.5) - 0.5 + 0.035 + px() * 1.5);
 		float board = hash21(vec2(b, 9.0));
-		vec3 bc = ramp3(vec3(0.45, 0.27, 0.13), vec3(0.62, 0.41, 0.22), vec3(0.78, 0.57, 0.33), board * 0.6 + bev * 0.3 + warp * 0.2);
-		bc = mix(bc, bc * 0.72, grain_line * 0.7);
-		float g = grain(uv, 10.0);
-		bc *= 1.0 + 0.07 * g;
-		// nail heads near the board ends
-		vec2 np = vec2(min(sx, 1.0 - sx), abs(lv - 0.5) - 0.25);
-		float nail = edge(0.02 - length(vec2(np.x - 0.04, abs(lv - 0.5) * 0.25 - 0.06)));
-		bc = mix(bc, vec3(0.25, 0.24, 0.26), nail);
-		h = inside * (0.62 + 0.3 * bev - 0.08 * grain_line + 0.04 * g) + 0.08 * nail;
-		col = mix(vec3(0.10, 0.06, 0.03), bc, inside);
-		r = 0.72;
-	} else if (id == 9) { // leaves
-		vec3 l1 = blades(uv, 5.0, vec2(1.15, 0.38), 0.0, TAU, 21.0);
-		vec3 l2 = blades(uv + 0.1, 7.0, vec2(1.05, 0.34), 0.0, TAU, 22.0);
-		vec3 l3 = blades(uv + 0.27, 9.0, vec2(0.95, 0.3), 0.0, TAU, 23.0);
-		vec3 best = l1;
+		vec3 bc = pick4(vec3(0.62, 0.38, 0.22), vec3(0.56, 0.33, 0.19), vec3(0.67, 0.43, 0.25), vec3(0.59, 0.36, 0.21), board);
+		bc = mix(bc, bc * 0.75, grain_line * 0.8);
+		vec2 np = vec2(min(sx, 1.0 - sx) - 0.045, abs(lv - 0.5) * 0.25 - 0.06);
+		float nail = edge(0.016 - length(np));
+		bc = mix(bc, vec3(0.22, 0.20, 0.22), nail);
+		h = inside * (0.62 + 0.3 * ch - 0.06 * grain_line) + 0.06 * nail;
+		col = mix(vec3(0.20, 0.10, 0.06), bc, inside);
+		r = 0.75;
+	} else if (id == 9) { // leaves: rounded clumps, light top-left, dark underside
+		vec4 c1 = clumps(uv, 2.0, 0.66, 0.3, 21.0);
+		vec4 c2 = clumps(uv + 0.17, 3.0, 0.62, 0.38, 22.0);
+		vec4 c3 = clumps(uv + 0.41, 5.0, 0.58, 0.46, 23.0);
+		vec4 best = c1;
 		float layer = 0.0;
-		if (l2.x * 1.05 > best.x) { best = l2; layer = 1.0; }
-		if (l3.x * 1.1 > best.x) { best = l3; layer = 2.0; }
+		if (c2.x > best.x) { best = c2; layer = 1.0; }
+		if (c3.x > best.x) { best = c3; layer = 2.0; }
 		a = best.x > 0.02 ? 1.0 : 0.0;
-		h = 0.3 + 0.6 * best.x;
-		float tone = clamp(0.25 + layer * 0.22 + (best.y - 0.5) * 0.4 + best.z * 0.2, 0.0, 1.0);
-		col = ramp3(vec3(0.07, 0.23, 0.06), vec3(0.20, 0.45, 0.11), vec3(0.45, 0.70, 0.22), tone);
-		col *= mix(vec3(1.06, 1.0, 0.8), vec3(0.85, 1.0, 1.05), best.y);
-		r = 0.6;
+		h = 0.2 + 0.8 * best.x;
+		vec3 base = mix(vec3(0.20, 0.45, 0.18), vec3(0.26, 0.52, 0.20), layer * 0.5) * mix(1.04, 0.94, best.y);
+		vec3 light = mix(base * 1.3, vec3(0.50, 0.76, 0.26), 0.45);
+		vec3 dark = base * vec3(0.62, 0.68, 0.74);
+		float lit = edge((best.w - 0.15) * 0.25);
+		float shad = edge((-0.4 - best.w) * 0.25);
+		col = mix(mix(base, light, lit), dark, shad);
+		float rimline = 1.0 - edge(best.z - 0.005 - px() * 0.5);
+		col = mix(col, vec3(0.06, 0.18, 0.08), rimline * 0.85);
+		// small leaf strokes in the lit area
+		vec3 lf = blades(uv, 14.0, vec2(0.6, 0.18), -0.8, 0.8, 24.0);
+		col = mix(col, light * 1.08, edge(lf.x - 0.3) * lit * 0.7);
+		r = 0.7;
 	} else if (id == 10) { // glass
 		float fw = 0.06;
 		float e = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
 		float frame = 1.0 - edge(e - fw);
-		float fb = bevel(e, fw);
 		float diag = uv.x + uv.y;
 		float glint = edge(0.035 - abs(diag - 0.62)) + edge(0.015 - abs(diag - 0.74)) + edge(0.02 - abs(diag - 1.32)) * 0.6;
 		glint *= 1.0 - frame;
-		col = mix(vec3(0.70, 0.88, 0.95), vec3(0.95, 0.99, 1.0), clamp(glint, 0.0, 1.0));
-		vec3 fc = mix(vec3(0.62, 0.80, 0.88), vec3(0.96, 1.0, 1.0), fb);
+		col = mix(vec3(0.70, 0.92, 0.95), vec3(0.96, 1.0, 1.0), clamp(glint, 0.0, 1.0));
+		float fo = 1.0 - edge(e - px() * 1.2) + (1.0 - edge(abs(e - fw) - px() * 0.6));
+		vec3 fc = mix(vec3(0.78, 0.92, 0.95), vec3(0.30, 0.50, 0.55), clamp(fo, 0.0, 1.0));
 		col = mix(col, fc, frame);
 		a = mix(0.12 + 0.5 * clamp(glint, 0.0, 1.0), 1.0, frame);
-		h = mix(0.6, 0.75 + 0.25 * fb, frame);
+		h = mix(0.6, 0.85, frame);
 		r = 0.03;
-	} else if (id == 11) { // water
-		vec2 rel;
-		vec2 wp = uv + 0.06 * vec2(fbm(uv, 3.0, 2), fbm(uv + 0.4, 3.0, 2));
-		vec4 v = voro(wp, vec2(5.0), 1.0, rel);
-		float line = 1.0 - edge(v.y / 5.0 - 0.008 - px() * 0.5);
-		vec2 rel2;
-		vec4 v2 = voro(wp + 0.31, vec2(9.0), 1.0, rel2);
-		float line2 = 1.0 - edge(v2.y / 9.0 - 0.004 - px() * 0.4);
-		float depth = fbm(uv, 2.0, 3);
-		h = 0.35 + 0.25 * bevel(v.y / 5.0, 0.08) + 0.25 * line + 0.1 * line2;
-		col = ramp3(vec3(0.04, 0.22, 0.42), vec3(0.08, 0.40, 0.62), vec3(0.20, 0.62, 0.78), depth * 0.7 + bevel(v.y / 5.0, 0.1) * 0.3);
-		col = mix(col, vec3(0.75, 0.95, 1.0), line * 0.8 + line2 * 0.35);
-		a = 0.62 + 0.25 * line;
+	} else if (id == 11) { // water: turquoise with white foam squiggles
+		float w1 = fbm(uv, 2.0, 3);
+		float w2 = fbm(uv + 0.5, 3.0, 2);
+		float ph = uv.y * 5.0 + 0.18 * sin(TAU * (uv.x * 3.0 + w1)) + w2 * 0.9;
+		float d1 = abs(fract(ph) - 0.5) / 5.0;
+		float dash = edge((fbm(uv + 0.6, 4.0, 2) - 0.5) * 0.5);
+		float foam = (1.0 - edge(d1 - 0.006 - px() * 0.5)) * dash;
+		float ph2 = uv.y * 9.0 + 0.25 * sin(TAU * (uv.x * 5.0 + w2)) + w1 * 1.3 + 0.3;
+		float d2 = abs(fract(ph2) - 0.5) / 9.0;
+		float dash2 = edge((fbm(uv + 0.2, 6.0, 2) - 0.6) * 0.5);
+		float foam2 = (1.0 - edge(d2 - 0.0035 - px() * 0.4)) * dash2;
+		float deep = patch(uv, 2.0, 0.55, 3.0);
+		float shallow = patch(uv + 0.3, 3.0, 0.62, 9.0);
+		h = 0.4 + 0.1 * w1 + 0.35 * foam + 0.2 * foam2;
+		col = mix(vec3(0.16, 0.78, 0.88), vec3(0.07, 0.58, 0.82), deep);
+		col = mix(col, vec3(0.42, 0.90, 0.93), shallow * (1.0 - deep) * 0.8);
+		col = mix(col, vec3(0.94, 0.99, 1.0), max(foam, foam2 * 0.85));
+		a = 0.66 + 0.3 * max(foam, foam2);
 		r = 0.03;
-	} else if (id == 12) { // bricks
-		float row = floor(uv.y * 4.0);
-		float x = uv.x + mod(row, 2.0) * 0.25;
-		float cx = floor(x * 2.0);
-		float lx = fract(x * 2.0);
-		float ly = fract(uv.y * 4.0);
-		float e = min(min(lx, 1.0 - lx) * 0.5, min(ly, 1.0 - ly) * 0.25);
-		float mw = 0.012 + px() * 0.6;
-		vec2 cid = vec2(mod(cx, 2.0), mod(row, 4.0));
-		float bid = hash21(cid + 5.0);
-		// chipped corners/edges
-		vec3 chip = dots(uv, 12.0, 0.22, 0.2, 31.0);
-		float chipcut = chip.x * (1.0 - edge(e - mw - 0.014));
-		float inside = edge(e - mw) * (1.0 - chipcut);
-		float bev = bevel(e - mw, 0.03);
-		float g = grain(uv, 12.0);
-		float wash = fbm(uv, 6.0, 3);
-		h = inside * (0.55 + 0.35 * bev + 0.05 * g + 0.05 * wash);
-		vec3 bc = ramp3(vec3(0.46, 0.17, 0.11), vec3(0.64, 0.28, 0.17), vec3(0.78, 0.42, 0.26), bid * 0.6 + wash * 0.4);
-		bc = mix(bc, bc * vec3(0.8, 0.85, 0.95), step(0.85, bid) * 0.5);
-		vec3 s = dots(uv, 22.0, 0.35, 0.12, 14.0);
-		bc = mix(bc, bc * 1.25, s.x * 0.5);
-		bc *= 1.0 + 0.08 * g;
-		vec3 mortar = vec3(0.62, 0.59, 0.53) * (0.85 + 0.15 * wash);
-		col = mix(mortar * 0.85, bc, inside);
-		h = max(h, 0.18 + 0.05 * wash);
+	} else if (id == 12) { // bricks: warm sandstone cut blocks
+		cut_stone(uv, 4.0, 31.0, vec3(0.80, 0.70, 0.55), vec3(0.74, 0.63, 0.49), vec3(0.85, 0.76, 0.60), vec3(0.76, 0.54, 0.36), col, h, ed, bid);
 		r = 0.85;
 	} else if (id == 13) { // snow
 		float drift = fbm(uv, 2.0, 4);
 		float warp = fbm(uv + 0.3, 3.0, 2);
 		float wind = fract(uv.y * 3.0 + uv.x + warp * 1.4);
 		float ripple = smoothstep(0.0, 0.7, wind) * (1.0 - smoothstep(0.85, 1.0, wind));
-		h = 0.3 + 0.45 * drift + 0.15 * ripple + 0.04 * grain(uv, 15.0);
-		col = ramp3(vec3(0.58, 0.68, 0.90), vec3(0.84, 0.90, 0.99), vec3(1.0, 1.0, 1.0), h * 1.2 - 0.15);
-		vec3 sp = dots(uv, 24.0, 0.2, 0.09, 17.0);
-		vec3 sp2 = dots(uv + 0.5, 40.0, 0.12, 0.08, 18.0);
-		col = mix(col, vec3(1.0), max(sp.x, sp2.x * 0.8));
-		col = mix(col, vec3(0.7, 0.85, 1.0), sp.x * step(0.6, sp.z) * 0.5);
-		r = mix(0.65, 0.1, sp.x);
+		h = 0.4 + 0.2 * drift;
+		col = mix(vec3(0.97, 0.98, 1.0), vec3(0.80, 0.87, 0.97), patch(uv, 3.0, 0.6, 15.0));
+		vec3 sp = dots(uv, 20.0, 0.18, 0.09, 17.0);
+		col = mix(col, vec3(0.70, 0.85, 1.0), sp.x * 0.6);
+		r = mix(0.65, 0.15, sp.x);
 	} else if (id == 14) { // gravel
-		vec2 rel;
-		vec4 v = voro(uv, vec2(res <= 16.0 ? 4.0 : 8.0), 1.0, rel);
 		float n = res <= 16.0 ? 4.0 : 8.0;
-		float ed = v.y / n;
-		float gw = 0.01 + px() * 0.5;
-		float inside = edge(ed - gw);
-		float dome = sqrt(bevel(ed - gw, 0.06));
-		h = inside * (0.3 + 0.65 * dome * (0.7 + 0.3 * v.z));
-		vec3 sc = v.z < 0.33 ? vec3(0.46, 0.45, 0.47) : (v.z < 0.66 ? vec3(0.60, 0.54, 0.47) : vec3(0.34, 0.34, 0.38));
-		sc *= 0.72 + 0.42 * dome + 0.08 * grain(uv, 16.0);
-		col = mix(vec3(0.08, 0.07, 0.07), sc, inside);
+		vec2 rel;
+		vec4 v = voro(uv, vec2(n), 1.0, rel);
+		ed = v.y / n;
+		float lw = 0.006 + px() * 0.5;
+		float inside = edge(ed - lw);
+		float dome = sqrt(chamfer(ed - lw, 0.04));
+		h = inside * (0.35 + 0.55 * dome);
+		vec3 sc = pick4(vec3(0.58, 0.54, 0.50), vec3(0.66, 0.58, 0.47), vec3(0.48, 0.46, 0.46), vec3(0.62, 0.52, 0.42), v.z);
+		col = mix(OUTLINE, sc, inside);
 		r = 0.85;
 	} else if (id == 15) { // crystal
 		vec2 rel;
 		vec4 v = voro(uv, vec2(3.0), 0.9, rel);
 		float ang = v.z * TAU;
 		vec2 dir = vec2(cos(ang), sin(ang));
-		// two planar facets per cell split along a random line
 		float side = step(0.0, dot(rel, vec2(-dir.y, dir.x)));
 		float facet = clamp(0.55 + dot(rel, dir) * (side > 0.5 ? 0.7 : -0.5), 0.0, 1.0);
-		float ed = v.y / 3.0;
-		float rim = 1.0 - edge(ed - 0.01 - px() * 0.5);
+		ed = v.y / 3.0;
+		float rim = 1.0 - edge(ed - 0.008 - px() * 0.5);
 		float split = 1.0 - edge(abs(dot(rel, vec2(-dir.y, dir.x))) / 3.0 - px() * 0.6);
 		h = 0.4 + 0.55 * facet - 0.3 * rim;
-		vec3 base = mix(vec3(0.25, 0.85, 1.0), vec3(0.72, 0.40, 1.0), v.z);
-		col = base * (0.45 + 0.75 * facet);
-		col = mix(col, vec3(0.92, 1.0, 1.0), max(rim, split * 0.7));
+		vec3 base = mix(vec3(0.25, 0.85, 1.0), vec3(0.70, 0.45, 1.0), v.z);
+		col = base * mix(0.7, 1.15, step(0.5, facet));
+		col = mix(col, vec3(0.95, 1.0, 1.0), max(rim, split * 0.7));
 		vec3 sp = dots(uv, 14.0, 0.2, 0.1, 19.0);
 		col = mix(col, vec3(1.0), sp.x * 0.8);
 		a = mix(0.78, 1.0, max(rim, sp.x));
 		r = 0.05;
-	} else if (id == 16) { // mossy stone
-		float ed;
-		float sid;
-		stone_plates(uv, 3.0, col, h, ed, sid);
-		float m = fbm(uv + 0.3, 3.0, 4) + 0.22 * (1.0 - smoothstep(0.0, 0.04, ed));
-		vec3 bl = blades(uv, 18.0, vec2(1.0, 0.22), 0.0, TAU, 51.0);
-		float fuzz = bl.x;
-		float moss = edge(m + 0.06 * (fuzz - 0.5) - 0.68);
-		float mh = bevel(m - 0.68, 0.1);
-		vec3 mc = ramp3(vec3(0.10, 0.22, 0.06), vec3(0.22, 0.40, 0.10), vec3(0.45, 0.64, 0.20), mh * 0.5 + fuzz * 0.6);
-		col = mix(col, mc, moss);
-		h = mix(h, max(h, 0.6) + 0.25 * mh + 0.06 * fuzz, moss);
-		r = mix(0.75, 0.95, moss);
+	} else if (id == 16) { // mossy stone: cut stone with moss spilling from the top edge
+		cut_stone(uv, 3.0, 11.0, vec3(0.57, 0.53, 0.49), vec3(0.49, 0.46, 0.45), vec3(0.64, 0.58, 0.50), vec3(0.60, 0.47, 0.37), col, h, ed, bid);
+		// lobed moss edge: overlapping round drips hanging from the top
+		float lobes = 0.0;
+		for (int k = 0; k < 7; k++) {
+			float cx = (float(k) + hash21(vec2(float(k), 81.0))) / 7.0;
+			float len = 0.08 + 0.22 * hash21(vec2(float(k), 82.0));
+			float wd = 0.07 + 0.05 * hash21(vec2(float(k), 83.0));
+			float dx = abs(fract(uv.x - cx + 0.5) - 0.5);
+			lobes = max(lobes, len * sqrt(max(0.0, 1.0 - (dx * dx) / (wd * wd))));
+		}
+		float drip = 0.1 + lobes;
+		float band = edge(drip - uv.y);
+		// a few moss pads on block tops elsewhere
+		float pad = edge((fbm(uv + 0.3, 3.0, 4) - 0.68) * 0.5) * step(0.5, fract(bid * 3.7));
+		float m = max(band, pad);
+		vec3 mc = mix(vec3(0.54, 0.78, 0.22), vec3(0.44, 0.69, 0.18), patch(uv, 5.0, 0.55, 2.0));
+		float under = edge(uv.y - drip + 0.022) * band;
+		mc = mix(mc, vec3(0.30, 0.52, 0.13), under);
+		vec3 t = tufts(uv, 10.0, vec2(0.5, 0.1), 0.35, 52.0);
+		mc = mix(mc, vec3(0.38, 0.62, 0.16), step(0.3, t.x) * (1.0 - under));
+		float ol = (1.0 - edge(uv.y - drip - px() * 1.5)) * (1.0 - band);
+		col = mix(col, vec3(0.16, 0.28, 0.08), ol * 0.9);
+		col = mix(col, mc, m);
+		h = mix(h, 0.86 + 0.06 * t.x, m);
+		r = mix(0.78, 0.92, m);
 	} else if (id == 17) { // marble
 		vec2 q = fract(uv * 2.0);
 		float e = min(min(q.x, 1.0 - q.x), min(q.y, 1.0 - q.y)) * 0.5;
-		float sw = 0.004 + px() * 0.6;
-		float inside = edge(e - sw);
-		float bev = bevel(e - sw, 0.02);
+		float lw = 0.004 + px() * 0.6;
+		float inside = edge(e - lw);
+		float ch = chamfer(e - lw, 0.02);
 		float f = fbm(uv, 3.0, 5);
 		float ph = (uv.x + uv.y) * 2.0 + f * 1.2;
 		float vd = abs(fract(ph) - 0.5) / 4.0;
 		float vein = 1.0 - edge(vd - 0.0025 - px() * 0.5);
-		float halo = 1.0 - smoothstep(0.0, 0.02, vd);
-		float ph2 = (uv.x * 2.0 - uv.y) * 1.0 + fbm(uv + 0.71, 3.0, 4) * 1.8;
+		float ph2 = (uv.x * 2.0 - uv.y) + fbm(uv + 0.71, 3.0, 4) * 1.8;
 		float vein2 = 1.0 - edge(abs(fract(ph2) - 0.5) / 3.0 - 0.0018 - px() * 0.4);
-		h = inside * (0.78 + 0.18 * bev) - 0.04 * vein;
-		col = ramp3(vec3(0.82, 0.80, 0.78), vec3(0.92, 0.91, 0.88), vec3(0.99, 0.98, 0.96), f);
-		col = mix(col, col * vec3(0.86, 0.87, 0.9), halo * 0.5);
-		col = mix(col, vec3(0.40, 0.41, 0.46), vein * 0.85);
-		col = mix(col, vec3(0.80, 0.66, 0.40), vein2 * 0.7);
-		col = mix(vec3(0.55, 0.53, 0.5), col, inside);
-		r = mix(0.5, 0.08, inside);
+		h = inside * (0.75 + 0.2 * ch) - 0.04 * vein;
+		col = mix(vec3(0.95, 0.93, 0.88), vec3(0.89, 0.87, 0.83), patch(uv, 3.0, 0.55, 1.0));
+		col = mix(col, vec3(0.55, 0.54, 0.58), vein * 0.85);
+		col = mix(col, vec3(0.84, 0.66, 0.38), vein2 * 0.8);
+		col = mix(vec3(0.45, 0.40, 0.36), col, inside);
+		r = mix(0.5, 0.1, inside);
 	} else if (id == 18) { // terracotta
 		vec2 q = fract(uv * 2.0);
 		vec2 t = floor(uv * 2.0);
 		float e = min(min(q.x, 1.0 - q.x), min(q.y, 1.0 - q.y)) * 0.5;
-		float sw = 0.01 + px() * 0.6;
-		float inside = edge(e - sw);
-		float bev = bevel(e - sw, 0.03);
+		float lw = 0.008 + px() * 0.6;
+		float inside = edge(e - lw);
+		float ch = chamfer(e - lw, 0.025);
 		vec2 c = q - 0.5;
 		float dia = abs(c.x) + abs(c.y);
 		float ring = 1.0 - edge(abs(length(c) - 0.36) * 0.5 - 0.012);
 		float diamond = edge(0.2 - dia);
 		float dia_line = 1.0 - edge(abs(dia - 0.28) * 0.5 - 0.01);
 		float motif = clamp(max(diamond, dia_line) + ring, 0.0, 1.0);
-		float f = fbm(uv, 8.0, 3);
 		float tv = hash21(t + 2.0);
-		h = inside * (0.6 + 0.25 * bev + 0.08 * motif + 0.04 * f);
-		vec3 tc = ramp3(vec3(0.58, 0.26, 0.13), vec3(0.75, 0.38, 0.19), vec3(0.88, 0.52, 0.28), f * 0.6 + tv * 0.3 + bev * 0.2);
-		vec3 glaze = mix(vec3(0.96, 0.84, 0.58), vec3(0.20, 0.50, 0.55), diamond);
-		col = mix(tc, glaze, motif * 0.9);
-		col = mix(vec3(0.42, 0.36, 0.30), col, inside);
+		h = inside * (0.6 + 0.25 * ch + 0.08 * motif);
+		vec3 tc = mix(vec3(0.80, 0.45, 0.24), vec3(0.74, 0.40, 0.21), step(0.5, tv));
+		vec3 glaze = mix(vec3(0.97, 0.86, 0.60), vec3(0.16, 0.58, 0.62), diamond);
+		col = mix(tc, glaze, motif * 0.95);
+		col = mix(OUTLINE, col, inside);
 		r = mix(0.6, 0.18, motif * inside);
-	} else if (id == 19) { // slate
+	} else if (id == 19) { // slate roof tiles
 		float rows = 4.0;
 		float row = floor(uv.y * rows);
 		float ly = fract(uv.y * rows);
@@ -638,19 +718,16 @@ void mat(int id, vec2 uv, out vec3 col, out float h, out float r, out float a) {
 		float lx = fract(x * 2.0);
 		float cx = floor(x * 2.0);
 		float dx = min(lx, 1.0 - lx) * 0.5;
-		float sw = 0.006 + px() * 0.6;
+		float lw = 0.006 + px() * 0.6;
 		float sid = hash21(vec2(mod(cx, 2.0), mod(row, rows)) + 17.0);
-		// rounded bottom corners
 		vec2 cq = vec2(max(0.0, 0.1 - min(lx, 1.0 - lx)), max(0.0, ly - 0.9)) * vec2(1.0, 2.0);
 		float corner = edge(0.1 - length(cq));
-		float inside = edge(dx - sw) * corner;
-		float g = grain(uv, 21.0);
-		h = inside * (0.2 + 0.7 * pow(ly, 0.8) + 0.04 * g);
-		col = ramp3(vec3(0.15, 0.17, 0.22), vec3(0.24, 0.27, 0.33), vec3(0.36, 0.40, 0.46), sid * 0.5 + ly * 0.5);
-		col *= 1.0 + 0.07 * g;
-		col = mix(col, col * 1.35, edge(ly - 0.93) * inside);
-		col = mix(vec3(0.05, 0.05, 0.07), col, inside);
-		r = 0.45;
+		float inside = edge(dx - lw) * corner * edge((1.0 - ly) / rows - lw * 0.5);
+		h = inside * (0.25 + 0.65 * ly);
+		col = pick4(vec3(0.32, 0.36, 0.44), vec3(0.28, 0.31, 0.39), vec3(0.36, 0.40, 0.47), vec3(0.30, 0.33, 0.42), sid);
+		col = mix(col, col * 1.25, edge(ly - 0.88) * inside);
+		col = mix(vec3(0.10, 0.10, 0.14), col, inside);
+		r = 0.5;
 	}
 	col = clamp(col, 0.0, 1.0);
 	h = clamp(h, 0.0, 1.0);
@@ -742,13 +819,17 @@ void fragment() {
 		float a;
 		mat(id, uv, col, h, r, a);
 		if (mode == 0) {
-			// Bake hand-painted light from the image's top-left: slopes facing it brighten,
-			// the far side darkens, crevices get a little ambient occlusion.
+			// Cel-shaded light from the image's top-left: surfaces facing it get a crisp
+			// highlight band, surfaces facing away a cool shadow band, flats stay mid-tone.
 			float e = 1.5 / res;
 			float h2 = height_of(id, uv - vec2(e, e) * 0.7071);
-			float slope = clamp((h - h2) / e * 0.035, -1.0, 1.0);
-			col *= 1.0 + 0.42 * slope;
-			col *= mix(0.72, 1.0, smoothstep(0.0, 0.45, h));
+			float gain = (id == 9 || id == 2 || id == 1) ? 0.6 : 1.0;
+			float slope = (h - h2) / e * 0.035 * gain;
+			float cel = (id == 11 || id == 13 || id == 5) ? 0.45 : 1.0;
+			float hi = smoothstep(0.10, 0.16, slope) * cel;
+			float lo = (1.0 - smoothstep(-0.16, -0.10, slope)) * cel;
+			col = mix(col, col * vec3(1.20, 1.17, 1.08) + vec3(0.03, 0.03, 0.02), hi);
+			col = mix(col, col * vec3(0.68, 0.70, 0.80), lo);
 			COLOR = vec4(clamp(col, 0.0, 1.0), a);
 		} else {
 			float e = 1.0 / res;
