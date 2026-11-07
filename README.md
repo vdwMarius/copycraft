@@ -45,4 +45,8 @@ Run `./tools/godot.sh --headless --script res://tests/micro_details.gd` for nati
 
 Open **Materials** on screen, or press **M** on desktop. Choose surface grid **1×1 / 4×4 (16 cells) / 8×8 (64 cells)**, independent texture resolution **16×16 / 64×64 / 128×128**, and Raised detail **Off / On**. Changes appear immediately and survive restart. The built-in original pack covers grass, soil, bark, stone, sand, and leaves. Raised grass/soil/bark detail is nearby visual geometry; collision and building blocks stay coarse. Texture resolution does not create extra simulation cubes.
 
-`python tools/checks.py` runs all eight regression suites. On a display, `./tools/godot.sh --script res://tests/material_capture.gd` saves comparative captures under build/. See [material validation and limits](docs/VALIDATION-01d.md). This APK requires a fresh phone performance check.
+`python tools/checks.py` runs all nine regression suites. On a display, `./tools/godot.sh --script res://tests/material_capture.gd` saves comparative captures under build/. See [material validation and limits](docs/VALIDATION-01d.md). This APK requires a fresh phone performance check.
+
+## Smoother relief transitions (0.1.4)
+
+Raised surfaces now extend farther and blend their real height into the base surface rather than switching abruptly at the old 32-face boundary. Stable residency handles block crossings and movement reversal. Nine instanced batches support a higher, bounded face budget; material settings and collision are preserved. See [transition validation and budgets](docs/VALIDATION-01e.md). A new phone performance/transition check is required.

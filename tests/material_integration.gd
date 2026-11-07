@@ -24,7 +24,8 @@ func run() -> void:
 					check(instance.material_override == scene.surface_material, "Trees and details use same active pack")
 				var stats: Dictionary = scene.relief_layer.stats
 				check(stats.patches > 0 if raised else stats.patches == 0, "Relief geometry follows toggle")
-				check(stats.triangles <= 24576 and stats.pool == 32, "Detail budget remains bounded across switches")
+				check(stats.triangles <= 294912 and stats.pool == 384 and stats.patches <= 256, "Batched transition residency remains bounded across switches")
+				check(scene.relief_layer._batches.size() == 9, "Material choices retain nine relief batches")
 				check(collision.get_child(0).shape == original_shape, "Changing appearance preserves terrain collider")
 	check(scene._pack_cache.size() == 3, "Only three resolution packs retained")
 	var cached: RefCounted = scene._pack_cache[64]

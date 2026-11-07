@@ -4,7 +4,7 @@ from pathlib import Path
 import subprocess
 import sys
 root = Path(__file__).resolve().parents[1]
-suites = ['material_pack', 'surface_relief', 'material_integration', 'material_ui', 'micro_details', 'touch', 'autojump', 'smoke']
+suites = ['material_pack', 'surface_relief', 'relief_transitions', 'material_integration', 'material_ui', 'micro_details', 'touch', 'autojump', 'smoke']
 for suite in suites:
     result = subprocess.run([str(root/'tools/godot.sh'), '--headless', '--script', f'res://tests/{suite}.gd'], cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     print(result.stdout, end='', flush=True)

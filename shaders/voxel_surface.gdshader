@@ -6,17 +6,28 @@ uniform sampler2DArray height_layers : filter_nearest_mipmap, repeat_enable;
 uniform float grid_size = 4.0;
 uniform float texture_size = 64.0;
 uniform bool relief_enabled = true;
+uniform bool is_relief_geometry = false;
+varying float geometry_strength;
 varying vec3 world_position;
 varying vec3 world_normal;
 varying float material_index;
 
 void vertex() {
+	geometry_strength = 1.0;
+	if (is_relief_geometry) {
+		geometry_strength = smoothstep(0.0, 1.0, INSTANCE_CUSTOM.r);
+		int code = int(round(UV.y));
+		vec3 axis = code < 3 ? vec3(1,0,0) : (code < 5 ? vec3(0,1,0) : vec3(0,0,1));
+		float axis_sign = (code == 1 || code == 3 || code == 5) ? 1.0 : -1.0;
+		VERTEX -= axis * axis_sign * UV.x * (1.0 - geometry_strength);
+	}
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	world_normal = normalize(MODEL_NORMAL_MATRIX * NORMAL);
 	material_index = round(COLOR.r * 255.0);
 }
 
 void fragment() {
+	if (is_relief_geometry && geometry_strength < 0.001) { discard; }
 	vec3 n = abs(world_normal);
 	vec2 uv = n.y > 0.5 ? world_position.xz : (n.x > 0.5 ? world_position.zy : world_position.xy);
 	float layer = clamp(round(material_index), 0.0, 5.0);

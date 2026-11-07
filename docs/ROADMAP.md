@@ -24,6 +24,7 @@ Approved material controls: face grids 1×1, 4×4 (16 cells), 8×8 (64 cells), i
 | 01 | Android foundation and profiling | Reproducible debug APK build, minimal terrain scene, touch movement/look, frame-time instrumentation; device installation reported separately |
 | 01c | Visual quarter-voxel experiment | Bounded native detail, shared meshes, control regressions and updated Android APK; new phone result pending |
 | 01d | Selectable material detail | Saved face-grid/texture-resolution settings, original color/height pack, bounded visual relief, Android APK |
+| 01e | Smooth relief transitions | Stable batched residency, expanded coverage, continuous height transitions and bounded costs |
 | 02 | Streamed voxel world | Seeded terrain, background generation/meshing, bounded queues and memory, selectable distance; traversal and boundary tests |
 | 03 | Interactive sandbox | Block selection, removal/placement, collision, local world saves; edits survive restart |
 | 03b | Fractional building pieces | Half/quarter pieces, snapping, orientation, collision and save/load tests |
