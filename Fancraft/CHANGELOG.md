@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1
+- The cracks overlay now fits the solid part of the piece being broken (for example a
+  quarter-height terrace or a slab) instead of a full block-sized box.
+- Proposed v2 direction (smooth diggable terrain, survival and crafting): see
+  docs/PLAN-v2-smooth-survival.md.
+
 ## 0.6.0: break feedback, pacing, and the 4× MSAA cliff
 
 Phone report on 0.5.0: about 60 fps on Ultra, 20–30 fps with 4× MSAA; movement too fast;

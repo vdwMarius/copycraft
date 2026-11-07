@@ -152,8 +152,10 @@ func break_info_at_screen(screen_pos: Vector2) -> Dictionary:
 	var size := piece_size()
 	var volume := float(size.x * size.y * size.z) / 64.0
 	var hard: float = HARDNESS.get(Blocks.DEFS[id][0], 0.5)
+	var box := Pieces.break_box(t.hit, t.normal, size, snap_step())
 	return {
-		"box": Pieces.break_box(t.hit, t.normal, size, snap_step()),
+		"box": box,
+		"shape": world.solid_bounds(box),   # what is really there, for the cracks overlay
 		"id": id,
 		"time": hard * (0.35 + 0.65 * volume),
 	}

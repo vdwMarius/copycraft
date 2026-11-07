@@ -473,6 +473,23 @@ func box_has_solid(box: AABB) -> bool:
 	return false
 
 
+## Bounding box of the solid quarter-cells inside `box` (empty AABB if none).
+func solid_bounds(box: AABB) -> AABB:
+	var from := Vector3i(box.position)
+	var to := Vector3i(box.end)
+	var lo := Vector3i(1 << 30, 1 << 30, 1 << 30)
+	var hi := -lo
+	for y in range(from.y, to.y):
+		for z in range(from.z, to.z):
+			for x in range(from.x, to.x):
+				if get_micro(Vector3i(x, y, z)) != 0:
+					lo = lo.min(Vector3i(x, y, z))
+					hi = hi.max(Vector3i(x, y, z))
+	if hi.x < lo.x:
+		return AABB()
+	return AABB(Vector3(lo), Vector3(hi - lo + Vector3i.ONE))
+
+
 ## Fill a box of world quarter-cells with `id` (0 removes). Returns cells changed.
 func edit_box(box: AABB, id: int) -> int:
 	if not box_loaded(box):

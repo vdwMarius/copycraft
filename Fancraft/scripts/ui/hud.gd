@@ -191,7 +191,8 @@ func _update_hold(delta: float) -> void:
 		_break_key = info.box   # swiped onto a different piece: start over
 		_break_progress = 0.0
 	_break_progress += delta / info.time
-	builder.show_cracks(info.box, _break_progress)
+	if info.shape.size != Vector3.ZERO:
+		builder.show_cracks(info.shape, _break_progress)
 	if _break_progress >= 1.0:
 		builder.hide_cracks()
 		_break_progress = 0.0
