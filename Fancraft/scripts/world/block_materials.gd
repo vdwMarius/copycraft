@@ -4,8 +4,8 @@ extends RefCounted
 ## in sync with the texture library and graphics settings.
 
 const RENDER_MODES := [
-	"cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx",
-	"cull_disabled, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx",
+	"cull_back, depth_draw_opaque, diffuse_lambert_wrap, specular_schlick_ggx",
+	"cull_disabled, depth_draw_opaque, diffuse_lambert_wrap, specular_schlick_ggx",
 	"blend_mix, cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx",
 ]
 const PASS_DEFINES := ["PASS_OPAQUE", "PASS_CUTOUT", "PASS_TRANSLUCENT"]

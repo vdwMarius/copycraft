@@ -23,7 +23,7 @@ const NORMALS := [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0), Vect
 const US := [Vector3i(0, 0, 1), Vector3i(0, 0, 1), Vector3i(1, 0, 0), Vector3i(1, 0, 0), Vector3i(1, 0, 0), Vector3i(1, 0, 0)]
 const VS := [Vector3i(0, 1, 0), Vector3i(0, 1, 0), Vector3i(0, 0, 1), Vector3i(0, 0, 1), Vector3i(0, 1, 0), Vector3i(0, 1, 0)]
 const POSITIVE := [true, false, true, false, true, false]
-const AO_CURVE := [0.42, 0.62, 0.8, 1.0]
+const AO_CURVE := [0.34, 0.58, 0.8, 1.0]
 
 # Lookup tables (copied in from Blocks so workers never touch the scene tree).
 var face_layers: PackedInt32Array
@@ -104,6 +104,7 @@ func _fill_pad(neigh: Array) -> void:
 							for px in range(x0, x1):
 								pad[px + pz * P + py * P2] = v
 					continue
+				# Read-only: the main thread never mutates arrays after snapshotting (see VoxelWorld.edit_box).
 				var cells: PackedInt32Array = src[0]
 				var dets: Dictionary = src[1]
 				for py in range(y0, y1):

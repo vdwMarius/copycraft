@@ -4,6 +4,7 @@ extends Node3D
 const SEED := 20261107
 
 var env: Environment
+var sky_mat: ShaderMaterial
 var sun: DirectionalLight3D
 var world: VoxelWorld
 var player: Player
@@ -53,6 +54,8 @@ func _ready() -> void:
 	Settings.changed.connect(_apply_setting)
 	for k in ["fps_target", "render_scale", "msaa", "shadows", "glow", "render_distance"]:
 		_apply_setting(k)
+	if "--stress" in OS.get_cmdline_user_args():
+		add_child(load("res://scripts/dev/stress.gd").new())
 	if "--capture" in OS.get_cmdline_user_args():
 		add_child(load("res://scripts/dev/capture.gd").new())
 	get_tree().root.focus_exited.connect(func(): player.move_input = Vector2.ZERO)
@@ -99,43 +102,46 @@ func _build_environment() -> void:
 	env = Environment.new()
 	env.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
-	var sm := ProceduralSkyMaterial.new()
-	sm.sky_top_color = Color(0.22, 0.45, 0.78)
-	sm.sky_horizon_color = Color(0.78, 0.84, 0.92)
-	sm.ground_horizon_color = Color(0.78, 0.84, 0.92)
-	sm.ground_bottom_color = Color(0.25, 0.3, 0.35)
-	sm.sun_angle_max = 20.0
-	sm.sun_curve = 0.08
-	sky.sky_material = sm
+	sky_mat = ShaderMaterial.new()
+	sky_mat.shader = load("res://shaders/sky.gdshader")
+	sky.sky_material = sky_mat
 	sky.radiance_size = Sky.RADIANCE_SIZE_64
+	sky.process_mode = Sky.PROCESS_MODE_INCREMENTAL
 	env.sky = sky
+	# Warm sun, cool sky-lit shade: the classic stylised lighting split.
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_color = Color(0.66, 0.64, 0.6)
-	env.ambient_light_sky_contribution = 0.45
-	env.ambient_light_energy = 0.85
+	env.ambient_light_sky_contribution = 0.75
+	env.ambient_light_color = Color(0.58, 0.64, 0.75)
+	env.ambient_light_energy = 0.9
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
-	env.tonemap_exposure = 1.05
-	env.tonemap_white = 6.0
+	env.tonemap_exposure = 1.1
+	env.tonemap_white = 5.0
 	env.fog_enabled = true
 	env.fog_mode = Environment.FOG_MODE_DEPTH
-	env.fog_light_color = Color(0.72, 0.8, 0.9)
-	env.fog_sun_scatter = 0.25
-	env.fog_depth_curve = 1.6
+	env.fog_light_color = Color(0.7, 0.82, 0.95)
+	env.fog_sun_scatter = 0.35
+	env.fog_depth_curve = 1.8
+	env.fog_sky_affect = 0.12
+	env.fog_height = 26.0
+	env.fog_height_density = 0.06
 	env.glow_enabled = true
-	env.glow_intensity = 0.55
-	env.glow_bloom = 0.04
-	env.glow_hdr_threshold = 1.1
+	env.glow_intensity = 0.6
+	env.glow_strength = 0.9
+	env.glow_bloom = 0.06
+	env.glow_hdr_threshold = 1.0
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 	env.adjustment_enabled = true
-	env.adjustment_saturation = 1.12
-	env.adjustment_contrast = 1.04
+	env.adjustment_saturation = 1.06
+	env.adjustment_contrast = 1.06
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 	sun = DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-48, -35, 0)
-	sun.light_color = Color(1.0, 0.94, 0.82)
-	sun.light_energy = 1.25
+	sun.rotation_degrees = Vector3(-40, -32, 0)
+	sun.light_color = Color(1.0, 0.9, 0.74)
+	sun.light_energy = 1.45
+	sun.light_angular_distance = 0.8
 	sun.shadow_bias = 0.04
 	sun.shadow_normal_bias = 1.2
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
@@ -157,10 +163,12 @@ func _apply_setting(key: String) -> void:
 		"msaa":
 			vp.msaa_3d = [Viewport.MSAA_DISABLED, Viewport.MSAA_2X, Viewport.MSAA_4X][clampi(int(v), 0, 2)]
 		"shadows":
-			sun.shadow_enabled = int(v) > 0
-			sun.directional_shadow_max_distance = 40.0 if int(v) == 1 else 80.0
-			sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL if int(v) == 1 else DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-			RenderingServer.directional_shadow_atlas_set_size(2048 if int(v) == 1 else 4096, true)
+			var q := int(v)
+			sun.shadow_enabled = q > 0
+			sun.shadow_blur = 1.2
+			sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS if q == 1 else DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+			sun.directional_shadow_max_distance = 56.0 if q == 1 else 96.0
+			RenderingServer.directional_shadow_atlas_set_size(2048 if q == 1 else 4096, true)
 		"glow":
 			env.glow_enabled = bool(v)
 		"render_distance":

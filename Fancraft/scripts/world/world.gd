@@ -19,6 +19,7 @@ var nodes := {}             # Vector3i -> MeshInstance3D
 var bodies := {}            # Vector3i -> StaticBody3D
 var collision_faces := {}   # Vector3i -> PackedVector3Array
 var versions := {}          # Vector3i -> int, bumped on every edit
+var applied := {}           # Vector3i -> version of the mesh currently shown
 var edited_store := {}      # Vector3i -> Chunk, kept when columns unload
 
 var materials: Array[ShaderMaterial] = []
@@ -28,7 +29,7 @@ var _tables: Dictionary
 var _center := Vector2i(1 << 30, 0)
 var _gen_queue: Array[Vector2i] = []
 var _mesh_queue: Array[Vector2i] = []
-var _urgent: Array[Vector3i] = []
+var _edit_done: Array = []
 var _tasks := []
 var _mutex := Mutex.new()
 var _gen_done: Array = []
@@ -43,7 +44,7 @@ func setup(seed_value: int, focus_node: Node3D, mats: Array[ShaderMaterial]) -> 
 	focus = focus_node
 	materials = mats
 	_tables = Mesher.tables_from(Blocks)
-	_max_tasks = clampi(OS.get_processor_count() - 2, 1, 6)
+	_max_tasks = clampi(int(OS.get_processor_count() * 0.6), 1, 6)
 	render_distance = Settings.get_value("render_distance")
 	Settings.changed.connect(_on_setting)
 
@@ -76,7 +77,7 @@ func _process(_delta: float) -> void:
 	_collect_generated()
 	_dispatch()
 	_upload()
-	stats.queue = _gen_queue.size() + _mesh_queue.size() + _urgent.size()
+	stats.queue = _gen_queue.size() + _mesh_queue.size()
 
 
 # ------------------------------------------------------------------ planning
@@ -122,6 +123,7 @@ func _unload_column(col: Vector2i) -> void:
 			bodies[c].queue_free()
 			bodies.erase(c)
 		collision_faces.erase(c)
+		applied.erase(c)
 	columns.erase(col)
 	_mesh_queue.erase(col)
 
@@ -139,25 +141,18 @@ func _reap_tasks() -> void:
 
 
 func _dispatch() -> void:
-	while _tasks.size() < _max_tasks and not _urgent.is_empty():
-		var c: Vector3i = _urgent.pop_front()
-		if chunks.has(c):
-			var job := [[c, _snapshot(c), versions.get(c, 0)]]
-			_tasks.append(WorkerThreadPool.add_task(_mesh_job.bind(job), false, "fancraft mesh edit"))
 	while _tasks.size() < _max_tasks and not _mesh_queue.is_empty():
 		var col: Vector2i = _mesh_queue.pop_back()
 		if not columns.has(col) or columns[col] != 2:
 			continue
-		var job := []
+		columns[col] = 3
 		for y in TerrainGenerator.WORLD_CHUNKS_Y:
 			var c := Vector3i(col.x, y, col.y)
 			var ch: Chunk = chunks.get(c)
 			if ch == null or ch.is_empty():
 				continue
-			job.append([c, _snapshot(c), versions.get(c, 0)])
-		columns[col] = 3
-		if not job.is_empty():
-			_tasks.append(WorkerThreadPool.add_task(_mesh_job.bind(job), false, "fancraft mesh"))
+			var job := [[c, _snapshot(c), versions.get(c, 0)]]
+			_tasks.append(WorkerThreadPool.add_task(_mesh_job.bind(job, false), false, "fancraft mesh"))
 	while _tasks.size() < _max_tasks and not _gen_queue.is_empty():
 		var col: Vector2i = _gen_queue.pop_back()
 		if columns.has(col):
@@ -177,7 +172,7 @@ func _gen_job(col: Vector2i) -> void:
 	_mutex.unlock()
 
 
-func _mesh_job(job: Array) -> void:
+func _mesh_job(job: Array, is_edit: bool) -> void:
 	var mesher := Mesher.new(_tables)
 	var results := []
 	for entry in job:
@@ -190,7 +185,10 @@ func _mesh_job(job: Array) -> void:
 		r.ms = (Time.get_ticks_usec() - t) / 1000.0
 		results.append(r)
 	_mutex.lock()
-	_mesh_done.append_array(results)
+	if is_edit:
+		_edit_done.append_array(results)
+	else:
+		_mesh_done.append_array(results)
 	_mutex.unlock()
 
 
@@ -202,6 +200,13 @@ func _snapshot(c: Vector3i) -> Array:
 			for dx in range(-1, 2):
 				var ch: Chunk = chunks.get(c + Vector3i(dx, dy, dz))
 				n[(dx + 1) + (dz + 1) * 3 + (dy + 1) * 9] = null if ch == null else [ch.cells, ch.details]
+				if ch and OS.has_environment("FANCRAFT_VALIDATE"):
+					if ch.cells.size() != 4096:
+						printerr("BAD cells size ", ch.coord, " ", ch.cells.size())
+					for i in 4096:
+						if ch.cells[i] == -1 and not ch.details.has(i):
+							printerr("BAD detail missing ", ch.coord, " ", i)
+							break
 	return n
 
 
@@ -243,6 +248,13 @@ func _neighbours_ready(col: Vector2i) -> bool:
 # ------------------------------------------------------------------ uploads
 
 func _upload() -> void:
+	# Player edits first, without a time budget, so building feels instant.
+	_mutex.lock()
+	var edits := _edit_done
+	_edit_done = []
+	_mutex.unlock()
+	for r in edits:
+		_apply_mesh(r)
 	var start := Time.get_ticks_usec()
 	while Time.get_ticks_usec() - start < UPLOAD_BUDGET_USEC:
 		_mutex.lock()
@@ -264,8 +276,10 @@ func _upload() -> void:
 
 func _apply_mesh(r: Dictionary) -> void:
 	var c: Vector3i = r.coord
-	if not chunks.has(c) or r.version < versions.get(c, 0):
+	# Results can arrive out of order; never replace a newer mesh with an older one.
+	if not chunks.has(c) or r.version <= applied.get(c, -1):
 		return
+	applied[c] = r.version
 	stats.mesh_ms = lerpf(stats.mesh_ms, r.ms, 0.1)
 	var mesh := ArrayMesh.new()
 	var tris := 0
@@ -399,7 +413,9 @@ func edit_box(box: AABB, id: int) -> int:
 				var base := c * 64
 				var lf := (from - base).clamp(Vector3i.ZERO, Vector3i(64, 64, 64))
 				var lt := (to - base).clamp(Vector3i.ZERO, Vector3i(64, 64, 64))
-				# Copy-on-write the detail table: worker snapshots may still read the old one.
+				# Packed arrays and dictionaries are shared by reference in Godot 4, and
+				# worker snapshots may still be reading them: edit fresh copies instead.
+				ch.cells = ch.cells.duplicate()
 				ch.details = ch.details.duplicate()
 				var before := ch.cells.duplicate()
 				var before_details := ch.details.duplicate()
@@ -417,11 +433,18 @@ func edit_box(box: AABB, id: int) -> int:
 									var touches := _box_near_chunk(from, to, n)
 									if touches:
 										dirty[n] = true
-	for c in dirty:
+	if dirty.is_empty():
+		return changed
+	# Remesh right away on a high-priority worker job (edited chunk first), bypassing
+	# the streaming queue so the change shows up within a frame or two.
+	var order: Array = dirty.keys()
+	var centre := Vector3((from + to) / 2) / 64.0
+	order.sort_custom(func(a, b): return Vector3(a).distance_squared_to(centre) < Vector3(b).distance_squared_to(centre))
+	var job := []
+	for c in order:
 		versions[c] = versions.get(c, 0) + 1
-		if not _urgent.has(c):
-			_urgent.append(c)
-	# Nearest first.
+		job.append([c, _snapshot(c), versions[c]])
+	_tasks.append(WorkerThreadPool.add_task(_mesh_job.bind(job, true), true, "fancraft edit"))
 	return changed
 
 

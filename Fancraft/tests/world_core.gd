@@ -33,6 +33,14 @@ func _initialize() -> void:
 	var back := Chunk.new()
 	check(back.deserialize(blob, raw * 2) and back.get_micro(8, 4, 6) == 11 and back.get_micro(9, 4, 6) == 0, "serialize round trip")
 
+	# Snapshot safety: a worker holding the old detail array must not see later edits.
+	var snap := Chunk.new()
+	snap.fill_micro_box(Vector3i(0, 0, 0), Vector3i(4, 2, 4), 3)
+	var held: PackedByteArray = snap.details[0]
+	var held_copy := held.duplicate()
+	snap.set_micro(0, 3, 0, 5)
+	check(held == held_copy, "editing a detailed cell does not mutate arrays held by workers")
+
 	# --- mesher
 	var single := Chunk.new()
 	single.set_block(5, 5, 5, 3)

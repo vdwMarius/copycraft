@@ -8,7 +8,7 @@
 uniform sampler2DArray albedo_tex : source_color, BLOCK_FILTER, repeat_enable;
 uniform sampler2DArray surface_tex : BLOCK_FILTER, repeat_enable;
 uniform int pom_steps = 12;
-uniform float pom_scale = 0.07;
+uniform float pom_scale = 0.05;
 uniform float pom_fade_start = 8.0;
 uniform float pom_fade_end = 20.0;
 uniform bool pom_shadows = false;
@@ -121,7 +121,10 @@ void fragment() {
 	float ao = COLOR.r;
 	ALBEDO = alb.rgb * cavity * shade * mix(1.0, ao, 0.55);
 	AO = ao;
-	AO_LIGHT_AFFECT = 0.25;
+	AO_LIGHT_AFFECT = 0.35;
+	// Soft rim sheen on edges facing away from the camera: a stylised "pop".
+	RIM = 0.22;
+	RIM_TINT = 0.6;
 	NORMAL = normalize((VIEW_MATRIX * vec4(wn, 0.0)).xyz);
 	ROUGHNESS = surf.b;
 	SPECULAR = 0.45;
@@ -131,7 +134,7 @@ void fragment() {
 #ifdef PASS_CUTOUT
 	ALPHA = alb.a;
 	ALPHA_SCISSOR_THRESHOLD = 0.5;
-	BACKLIGHT = alb.rgb * 0.55;
+	BACKLIGHT = alb.rgb * 0.3;
 #endif
 #ifdef PASS_TRANSLUCENT
 	float fres = pow(1.0 - vn, 3.0);

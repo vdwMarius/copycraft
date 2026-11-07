@@ -3,9 +3,10 @@ extends RefCounted
 ## 16³ block cells. A cell is air (0), a full block (1..255) or DETAIL (-1).
 ## Detailed cells hold 4×4×4 quarter-cells of material ids in `details`.
 ##
-## Mutation rule: never modify a PackedByteArray inside `details` in place;
-## take it out, change it, and store it back. Worker threads hold snapshots of
-## these arrays and rely on copy-on-write to stay consistent.
+## Mutation rule: packed arrays and dictionaries are shared BY REFERENCE in Godot 4.
+## Worker threads mesh from references to `cells`, `details` and the detail arrays,
+## so published chunks are only changed after copying (see VoxelWorld.edit_box and
+## set_micro, which duplicates a detail array before writing to it).
 
 const SIZE := 16
 const VOLUME := 4096
@@ -63,6 +64,7 @@ func set_micro(mx: int, my: int, mz: int, id: int) -> void:
 		d = details[ci]
 		if d[si] == id:
 			return
+		d = d.duplicate()
 	else:
 		if c == id:
 			return

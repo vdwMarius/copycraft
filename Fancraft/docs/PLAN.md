@@ -74,12 +74,13 @@ Each milestone ends with a pushed commit and a debug APK for phone testing.
 | M1 | Living world foundation | Micro-voxel chunk store, streamed seeded terrain with quarter-height terraces, threaded meshing with AO, POM block shader, GPU-synthesised texture set, touch controls, settings & presets, stats overlay | ✅ built in 0.1.0, phone test pending |
 | M2 | Free-form building | Pieces (block/slab/thin slab/half cube/quarter/pillar/beam/panel/post), rotation, snap modes, ghost preview, place/break, tap-to-build, step-up collision | ✅ built in 0.1.0, phone test pending |
 | M3 | Texture packs | Pack format, zip import via file picker, pack manager, resolution override, example template | ✅ built in 0.1.0; Android file picker not yet tried on a phone |
+| M3.5 | Phone feedback round 1 (0.2.0) | Instant building, working menus, 120 fps unlock, stylised texture set, new sky & lighting | ✅ built, phone test pending |
 | M4 | Visual polish | Day/night cycle, sky colours, water shoreline & waves, wind sway on leaves, ambient particles, shadow cascades tuned per preset | Planned |
 | M5 | Persistence | World saves (edited chunks only, compressed), multiple worlds, autosave on pause | Planned |
 | M6 | Performance pass | On-device profiling on S26 Ultra + a mid-range phone, distant-terrain LOD, adaptive render scale, thermal soak test (15 min), shader pre-warm | Planned |
 | M7 | Size & release | Custom stripped export template (target < 20 MB APK), release signing, AAB | Planned |
 
-## Known limits in 0.1.0
+## Known limits (0.2.0)
 
 * Player edits are kept in memory only (saving arrives in M5).
 * Meshing runs at about 20 ms per hilly chunk on a desktop CPU core, on worker threads. Load-in speed on phones still needs measuring.

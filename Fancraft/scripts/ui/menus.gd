@@ -9,6 +9,13 @@ var hud: Hud
 var _panel: PanelContainer
 var _body: VBoxContainer
 var _rows := {}   # setting key -> HBoxContainer of toggle buttons
+var _scroll: ScrollContainer
+# Touch handling: menus get raw touches (mouse emulation is off so the HUD can
+# use many fingers). A short tap activates the button under the finger, a drag scrolls.
+var _touch_index := -1
+var _touch_start := Vector2.ZERO
+var _scroll_start := 0
+var _dragging := false
 
 
 static func make_theme() -> Theme:
@@ -41,12 +48,12 @@ static func make_theme() -> Theme:
 
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	theme = make_theme()
 	visible = false
 	var shade := ColorRect.new()
 	shade.color = Color(0, 0, 0, 0.45)
-	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(shade)
 	_panel = PanelContainer.new()
 	_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -63,6 +70,7 @@ func _clear() -> VBoxContainer:
 	var outer := VBoxContainer.new()
 	_panel.add_child(outer)
 	var scroll := ScrollContainer.new()
+	_scroll = scroll
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	outer.add_child(scroll)
@@ -75,6 +83,59 @@ func _clear() -> VBoxContainer:
 	close.pressed.connect(close_menu)
 	outer.add_child(close)
 	return _body
+
+
+func _input(event: InputEvent) -> void:
+	if not visible:
+		return
+	if event is InputEventScreenTouch:
+		if event.pressed and _touch_index < 0:
+			_touch_index = event.index
+			_touch_start = event.position
+			_scroll_start = _scroll.scroll_vertical if _scroll else 0
+			_dragging = false
+		elif not event.pressed and event.index == _touch_index:
+			_touch_index = -1
+			if not _dragging:
+				tap(event.position)
+		get_viewport().set_input_as_handled()
+	elif event is InputEventScreenDrag and event.index == _touch_index:
+		if event.position.distance_to(_touch_start) > 14.0:
+			_dragging = true
+		if _dragging and _scroll:
+			_scroll.scroll_vertical = _scroll_start - int(event.position.y - _touch_start.y)
+		get_viewport().set_input_as_handled()
+
+
+## Activate whatever button is under `pos` (also used by tests).
+func tap(pos: Vector2) -> bool:
+	var btn := _button_at(self, pos)
+	if btn == null or btn.disabled:
+		return false
+	if btn.toggle_mode:
+		if btn.button_group == null:
+			btn.button_pressed = not btn.button_pressed
+		else:
+			btn.set_pressed_no_signal(true)
+	btn.pressed.emit()
+	_sync_rows()
+	return true
+
+
+func _button_at(node: Node, pos: Vector2) -> Button:
+	# Search children last-to-first so the topmost control wins.
+	for i in range(node.get_child_count() - 1, -1, -1):
+		var c := node.get_child(i)
+		if c is Control and not c.is_visible_in_tree():
+			continue
+		if c is ScrollContainer and not (c as Control).get_global_rect().has_point(pos):
+			continue
+		var found := _button_at(c, pos)
+		if found:
+			return found
+		if c is Button and (c as Control).get_global_rect().has_point(pos):
+			return c
+	return null
 
 
 func close_menu() -> void:
