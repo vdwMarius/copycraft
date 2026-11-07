@@ -15,7 +15,10 @@ var render_distance := 6
 
 var chunks := {}            # Vector3i -> Chunk
 var columns := {}           # Vector2i -> 0 queued, 1 generating, 2 generated, 3 meshed
-var nodes := {}             # Vector3i -> MeshInstance3D
+var nodes := {}             # Vector2i column -> MeshInstance3D (one merged mesh per column)
+var chunk_passes := {}      # Vector3i -> latest mesher passes for that chunk (immutable)
+var column_versions := {}   # Vector2i -> bumped whenever a chunk of the column changes
+var column_applied := {}    # Vector2i -> version of the merged mesh on screen
 var bodies := {}            # Vector3i -> StaticBody3D
 var collision_faces := {}   # Vector3i -> PackedVector3Array
 var versions := {}          # Vector3i -> int, bumped on every edit
@@ -30,6 +33,11 @@ var _center := Vector2i(1 << 30, 0)
 var _gen_queue: Array[Vector2i] = []
 var _mesh_queue: Array[Vector2i] = []
 var _edit_done: Array = []
+var _merge_done: Array = []
+var _merge_ready: Array = []
+var _merge_dirty := {}      # Vector2i -> true (needs a merge job)
+var _merge_urgent := {}     # Vector2i -> true (contains a player edit)
+var _merging := {}          # Vector2i -> true while a merge job is in flight
 var _tasks := []
 var _mutex := Mutex.new()
 var _gen_done: Array = []
@@ -115,10 +123,7 @@ func _unload_column(col: Vector2i) -> void:
 			if ch.edited:
 				edited_store[c] = ch
 			chunks.erase(c)
-		if nodes.has(c):
-			stats.triangles -= nodes[c].get_meta("tris", 0)
-			nodes[c].queue_free()
-			nodes.erase(c)
+		chunk_passes.erase(c)
 		if bodies.has(c):
 			bodies[c].queue_free()
 			bodies.erase(c)
@@ -126,6 +131,13 @@ func _unload_column(col: Vector2i) -> void:
 		applied.erase(c)
 	columns.erase(col)
 	_mesh_queue.erase(col)
+	if nodes.has(col):
+		stats.triangles -= nodes[col].get_meta("tris", 0)
+		nodes[col].queue_free()
+		nodes.erase(col)
+	column_applied.erase(col)
+	_merge_dirty.erase(col)
+	_merge_urgent.erase(col)
 
 
 # ------------------------------------------------------------------ worker jobs
@@ -179,10 +191,11 @@ func _mesh_job(job: Array, is_edit: bool) -> void:
 		if _quitting:
 			return
 		var t := Time.get_ticks_usec()
-		var r := mesher.build(entry[1])
+		var r := mesher.build(entry[1], entry[0].y * CS)
 		r.coord = entry[0]
 		r.version = entry[2]
 		r.ms = (Time.get_ticks_usec() - t) / 1000.0
+		r.edit = is_edit
 		results.append(r)
 	_mutex.lock()
 	if is_edit:
@@ -255,7 +268,19 @@ func _upload() -> void:
 	_mutex.unlock()
 	for r in edits:
 		_apply_mesh(r)
+	_dispatch_merges()
+	_mutex.lock()
+	var merges := _merge_done
+	_merge_done = []
+	_mutex.unlock()
+	for m in merges:
+		if m[3]:
+			_apply_column(m)       # contains a player edit: show it now
+		else:
+			_merge_ready.append(m)
 	var start := Time.get_ticks_usec()
+	while not _merge_ready.is_empty() and Time.get_ticks_usec() - start < UPLOAD_BUDGET_USEC:
+		_apply_column(_merge_ready.pop_front())
 	while Time.get_ticks_usec() - start < UPLOAD_BUDGET_USEC:
 		_mutex.lock()
 		var r = _mesh_done.pop_front() if not _mesh_done.is_empty() else null
@@ -281,10 +306,64 @@ func _apply_mesh(r: Dictionary) -> void:
 		return
 	applied[c] = r.version
 	stats.mesh_ms = lerpf(stats.mesh_ms, r.ms, 0.1)
+	var empty := true
+	for pass_i in 3:
+		if not r.passes[pass_i].verts.is_empty():
+			empty = false
+	if empty:
+		chunk_passes.erase(c)
+	else:
+		chunk_passes[c] = r.passes
+	var col := Vector2i(c.x, c.z)
+	column_versions[col] = column_versions.get(col, 0) + 1
+	_merge_dirty[col] = true
+	if r.get("edit", false):
+		_merge_urgent[col] = true
+	collision_faces[c] = r.collision
+	if _wants_collision(c):
+		_build_body(c)
+
+
+# ------------------------------------------------------------------ column merging
+# Each chunk column is drawn as ONE mesh (up to 3 surfaces) instead of one per chunk,
+# which cuts draw calls (and shadow-pass draw calls) roughly 2-3x. Merging runs on a
+# worker; player edits use high-priority jobs.
+
+func _dispatch_merges() -> void:
+	for col in _merge_dirty.keys():
+		if _merging.has(col):
+			continue   # one in flight; it will be redone when it lands
+		var urgent: bool = _merge_urgent.has(col)
+		if not urgent and _tasks.size() >= _max_tasks + 2:
+			continue
+		_merge_dirty.erase(col)
+		_merge_urgent.erase(col)
+		var parts := []
+		for y in TerrainGenerator.WORLD_CHUNKS_Y:
+			var c := Vector3i(col.x, y, col.y)
+			if chunk_passes.has(c):
+				parts.append(chunk_passes[c])
+		_merging[col] = true
+		_tasks.append(WorkerThreadPool.add_task(_merge_job.bind(col, column_versions.get(col, 0), parts, urgent), urgent, "fancraft merge"))
+
+
+func _merge_job(col: Vector2i, version: int, parts: Array, urgent: bool) -> void:
+	var merged := Mesher.merge_passes(parts)
+	_mutex.lock()
+	_merge_done.append([col, version, merged, urgent])
+	_mutex.unlock()
+
+
+func _apply_column(item: Array) -> void:
+	var col: Vector2i = item[0]
+	_merging.erase(col)
+	if not columns.has(col) or item[1] <= column_applied.get(col, -1):
+		return
+	column_applied[col] = item[1]
 	var mesh := ArrayMesh.new()
 	var tris := 0
 	for pass_i in 3:
-		var p: Dictionary = r.passes[pass_i]
+		var p: Dictionary = item[2][pass_i]
 		if p.verts.is_empty():
 			continue
 		var arrays := []
@@ -297,25 +376,22 @@ func _apply_mesh(r: Dictionary) -> void:
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 		mesh.surface_set_material(mesh.get_surface_count() - 1, materials[pass_i])
 		tris += p.idx.size() / 3
-	var mi: MeshInstance3D = nodes.get(c)
+	var mi: MeshInstance3D = nodes.get(col)
 	if mesh.get_surface_count() == 0:
 		if mi:
 			stats.triangles -= mi.get_meta("tris", 0)
 			mi.queue_free()
-			nodes.erase(c)
+			nodes.erase(col)
 	else:
 		if mi == null:
 			mi = MeshInstance3D.new()
-			mi.position = Vector3(c) * CS
+			mi.position = Vector3(col.x * CS, 0, col.y * CS)
 			mi.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 			add_child(mi)
-			nodes[c] = mi
+			nodes[col] = mi
 		mi.mesh = mesh
 		stats.triangles += tris - mi.get_meta("tris", 0)
 		mi.set_meta("tris", tris)
-	collision_faces[c] = r.collision
-	if _wants_collision(c):
-		_build_body(c)
 	stats.meshes = nodes.size()
 
 

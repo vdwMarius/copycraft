@@ -47,6 +47,39 @@ func _ready() -> void:
 	if after_tap - after_hold < 1:
 		failures += 1
 		printerr("FAIL: tapping did not place")
+	# Swipe while breaking: the view must not turn.
+	_touch(5, centre, true)
+	t0 = Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < 400:
+		await tree.process_frame
+	var yaw := p.rotation.y
+	var pitch := p.camera.rotation.x
+	for k in 6:
+		var d := InputEventScreenDrag.new()
+		d.index = 5
+		d.position = get_viewport().get_final_transform() * (centre + Vector2(40 * (k + 1), 0))
+		d.relative = Vector2(40, 0)
+		Input.parse_input_event(d)
+		await tree.process_frame
+	_touch(5, centre + Vector2(240, 0), false)
+	await tree.process_frame
+	if not is_equal_approx(yaw, p.rotation.y) or not is_equal_approx(pitch, p.camera.rotation.x):
+		failures += 1
+		printerr("FAIL: swiping while breaking turned the view")
+	# A normal drag (not held first) must still turn the view.
+	_touch(6, centre, true)
+	await tree.process_frame
+	var d2 := InputEventScreenDrag.new()
+	d2.index = 6
+	d2.position = get_viewport().get_final_transform() * (centre + Vector2(80, 0))
+	d2.relative = Vector2(80, 0)
+	Input.parse_input_event(d2)
+	await tree.process_frame
+	_touch(6, centre + Vector2(80, 0), false)
+	await tree.process_frame
+	if is_equal_approx(yaw, p.rotation.y):
+		failures += 1
+		printerr("FAIL: a normal drag no longer turns the view")
 	# A quick tap must never break; a hold must never place.
 	print("hold edits=", after_hold - before, " tap edits=", after_tap - after_hold)
 	print("INPUT_TEST_RESULT failures=%d" % failures)

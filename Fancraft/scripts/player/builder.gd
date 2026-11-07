@@ -1,7 +1,7 @@
 class_name Builder
 extends Node3D
 ## Targets surfaces under the crosshair (or a tapped screen point) and places or
-## removes building pieces at quarter-block precision. Shows a ghost preview.
+## removes building pieces at quarter-block precision.
 
 signal changed
 
@@ -17,51 +17,7 @@ var breaking := false
 ## Screen point to aim at while a finger is held on the view (x < 0: use the crosshair).
 var aim_screen := Vector2(-1, -1)
 
-var _ghost: MeshInstance3D
-var _ghost_mat: StandardMaterial3D
-var _edge: MeshInstance3D
 var _target := {}   # {hit, normal} or empty
-
-
-func _ready() -> void:
-	_ghost_mat = StandardMaterial3D.new()
-	_ghost_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_ghost_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_ghost_mat.no_depth_test = false
-	_ghost_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var box := BoxMesh.new()
-	box.size = Vector3.ONE
-	_ghost = MeshInstance3D.new()
-	_ghost.mesh = box
-	_ghost.material_override = _ghost_mat
-	_ghost.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(_ghost)
-	_edge = MeshInstance3D.new()
-	_edge.mesh = _edge_mesh()
-	var em := StandardMaterial3D.new()
-	em.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	em.albedo_color = Color(1, 1, 1, 0.95)
-	em.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_edge.material_override = em
-	_edge.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(_edge)
-	_ghost.visible = false
-	_edge.visible = false
-
-
-static func _edge_mesh() -> ArrayMesh:
-	var v := PackedVector3Array()
-	var c := [Vector3(0, 0, 0), Vector3(1, 0, 0), Vector3(1, 0, 1), Vector3(0, 0, 1)]
-	for i in 4:
-		v.append(c[i]); v.append(c[(i + 1) % 4])
-		v.append(c[i] + Vector3.UP); v.append(c[(i + 1) % 4] + Vector3.UP)
-		v.append(c[i]); v.append(c[i] + Vector3.UP)
-	var arrays := []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = v
-	var m := ArrayMesh.new()
-	m.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, arrays)
-	return m
 
 
 func piece_size() -> Vector3i:
@@ -81,7 +37,6 @@ func _process(_delta: float) -> void:
 	else:
 		var ray := player.eye_ray()
 		_target = raycast(ray[0], ray[1])
-	_update_ghost()
 
 
 func raycast(origin: Vector3, dir: Vector3) -> Dictionary:
@@ -107,31 +62,6 @@ func current_box(target: Dictionary) -> AABB:
 	if breaking:
 		return Pieces.break_box(target.hit, target.normal, piece_size(), snap_step())
 	return Pieces.place_box(target.hit, target.normal, piece_size(), snap_step())
-
-
-func _update_ghost() -> void:
-	if _target.is_empty():
-		_ghost.visible = false
-		_edge.visible = false
-		return
-	var box := current_box(_target)
-	if not breaking:
-		for lift in 4:
-			var b := box
-			b.position += _target.normal * lift
-			if not world.box_has_solid(b):
-				box = b
-				break
-	var pos := box.position * 0.25
-	var size := box.size * 0.25
-	var grow := 0.006
-	_ghost.visible = true
-	_edge.visible = true
-	_ghost.position = pos + size * 0.5
-	_ghost.scale = size + Vector3.ONE * grow * 2.0
-	_edge.position = pos - Vector3.ONE * grow
-	_edge.scale = size + Vector3.ONE * grow * 2.0
-	_ghost_mat.albedo_color = Color(1.0, 0.35, 0.3, 0.28) if breaking else Color(0.55, 1.0, 0.7, 0.22)
 
 
 ## Perform the current action at the crosshair (or at an explicit target).
@@ -169,6 +99,34 @@ func break_at_screen(screen_pos: Vector2) -> bool:
 	var ok := act_at_screen(screen_pos)
 	breaking = was
 	return ok
+
+
+## Seconds to break a full block of each material (Minecraft-like feel: soft blocks fast,
+## stone and brick slower). Smaller pieces break proportionally faster.
+const HARDNESS := {
+	"grass": 0.45, "dirt": 0.4, "sand": 0.35, "gravel": 0.4, "snow": 0.2, "leaves": 0.15,
+	"glass": 0.25, "stone": 0.75, "cobble": 0.8, "mossy": 0.75, "bricks": 0.8, "slate": 0.8,
+	"marble": 0.85, "terracotta": 0.6, "log": 0.6, "planks": 0.55, "crystal": 0.5,
+}
+
+
+## What a hold at `screen_pos` would break: {box, id, time} or {} if nothing.
+func break_info_at_screen(screen_pos: Vector2) -> Dictionary:
+	var cam := player.camera
+	var t := raycast(cam.project_ray_origin(screen_pos), cam.project_ray_normal(screen_pos))
+	if t.is_empty():
+		return {}
+	var id := world.get_block_at(t.hit - t.normal * 0.05)
+	if id <= 0:
+		return {}
+	var size := piece_size()
+	var volume := float(size.x * size.y * size.z) / 64.0
+	var hard: float = HARDNESS.get(Blocks.DEFS[id][0], 0.5)
+	return {
+		"box": Pieces.break_box(t.hit, t.normal, size, snap_step()),
+		"id": id,
+		"time": hard * (0.35 + 0.65 * volume),
+	}
 
 
 func has_target_at_screen(screen_pos: Vector2) -> bool:

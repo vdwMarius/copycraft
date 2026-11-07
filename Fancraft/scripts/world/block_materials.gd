@@ -9,7 +9,7 @@ const RENDER_MODES := [
 	"blend_mix, cull_back, depth_draw_opaque, unshaded",
 ]
 const PASS_DEFINES := ["PASS_OPAQUE", "PASS_CUTOUT", "PASS_TRANSLUCENT"]
-const POM_STEPS := [0, 8, 14, 24]
+const POM_STEPS := [0, 8, 12, 16]
 
 var materials: Array[ShaderMaterial] = []
 var _nearest := -1
@@ -48,6 +48,7 @@ func refresh() -> void:
 		m.set_shader_parameter("pom_fade_end", [0.0, 14.0, 22.0, 32.0][q])
 		m.set_shader_parameter("pom_fade_start", [0.0, 6.0, 10.0, 16.0][q])
 		m.set_shader_parameter("water_layer", float(Blocks.TEXTURE_NAMES.find("water")))
+		m.set_shader_parameter("lip_layer", float(Blocks.TEXTURE_NAMES.find("grass_side")))
 		m.set_shader_parameter("sun_dir", sun_dir)
 
 

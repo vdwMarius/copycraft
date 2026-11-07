@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.5.0: fewer draw calls, Minecraft-style breaking
+
+Phone report on 0.4.0: Max Fidelity ran at about 20 fps even with 3D resolution at 50%, so it
+was not limited by pixels. Ultra 120 ran at 80+ fps.
+
+**Performance**
+- **One merged mesh per chunk column** instead of one per chunk. Merging runs on worker
+  threads (high priority for edits). This roughly halves to thirds the draw calls in both
+  the main and shadow passes, the likely cause of Max Fidelity's CPU-bound frame time.
+- **Stats overlay** now shows CPU and GPU frame time and draw calls, so the next phone
+  report can pinpoint the bottleneck.
+- **Max Fidelity parallax** uses 16 steps instead of 24, with the same self-shadowing.
+
+**Building**
+- **Minecraft-style break timing:**
+  - each material has a hardness (leaves 0.15 s, dirt 0.4 s, stone and brick about 0.8 s);
+  - smaller pieces break faster;
+  - there is a 0.3 s cooldown after each broken piece before the next one starts.
+- **No floating ghost block.**
+- **Swiping during a break** no longer turns the view. The current block's progress stops
+  and the break moves to the block under your finger, starting over.
+- Input regression test covers swiping during a break, and checks that a normal drag still turns the view.
+
 ## 0.4.0: performance and Minecraft-style building
 
 Phone report on 0.2.0 at max settings: 50–70 fps (sometimes 90), lowest near water, and

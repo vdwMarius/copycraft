@@ -14,6 +14,7 @@ uniform float pom_fade_end = 20.0;
 uniform bool pom_shadows = false;
 uniform vec3 sun_dir = vec3(0.45, 0.75, 0.35);
 uniform float water_layer = 11.0;
+uniform float lip_layer = 1.0;   // grass_side: its grass lip is anchored to the face top
 uniform float cavity_strength = 0.75;
 uniform vec3 sun_color = vec3(1.0, 0.9, 0.74);
 uniform vec3 ambient_color = vec3(0.55, 0.66, 0.8);
@@ -23,12 +24,14 @@ varying vec3 w_pos;
 varying vec3 w_nrm;
 varying flat float v_layer;
 varying flat float v_emis;
+varying flat float v_top;
 
 void vertex() {
 	w_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	w_nrm = NORMAL;
 	v_layer = UV.x;
 	v_emis = UV.y;
+	v_top = COLOR.g;
 #ifdef PASS_CUTOUT
 	// Gentle wind sway for foliage.
 	float sway = sin(TIME * 1.6 + w_pos.x * 0.7 + w_pos.z * 0.5) * 0.025;
@@ -59,6 +62,9 @@ void fragment() {
 		Bv = vec3(0.0, -1.0, 0.0);
 	}
 	vec2 uv = vec2(dot(w_pos, T), dot(w_pos, Bv));
+	if (an.y < 0.5 && abs(v_layer - lip_layer) < 0.5) {
+		uv.y += v_top;   // texture top = top of this face (short terraces keep their grass lip)
+	}
 	bool is_water = abs(v_layer - water_layer) < 0.5;
 	if (is_water) {
 		uv += vec2(sin(TIME * 0.35 + uv.y * 0.6), cos(TIME * 0.3 + uv.x * 0.5)) * 0.08 + vec2(TIME * 0.03, TIME * 0.017);

@@ -53,6 +53,8 @@ func _ready() -> void:
 		await process_frame
 	var look_at_pos := q / 4.0 + Vector3(1, 1, 1)
 	p.global_position = look_at_pos + Vector3(3.5, 1.8, 3.5)
+	var ground: float = main.world.surface_height(p.global_position.x, p.global_position.z)
+	p.global_position.y = maxf(p.global_position.y, ground + 2.5)   # never film from inside a hill
 	p.look_at_from_position(p.global_position, Vector3(look_at_pos.x, p.global_position.y, look_at_pos.z))
 	p.camera.rotation.x = -0.35
 	for i in 30:

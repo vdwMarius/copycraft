@@ -240,7 +240,13 @@ func _process(delta: float) -> void:
 	sorted.sort()
 	var p95 := sorted[int(sorted.size() * 0.95)] if sorted.size() > 10 else 0.0
 	var s := world.stats
-	hud.stats_text = "%d fps  p95 %.1f ms | 3D %d%%%s | %s | chunks %d meshes %d tris %dk | gen %.1f ms mesh %.1f ms queue %d | %s %dpx" % [
-		Engine.get_frames_per_second(), p95, roundi(_scale * 100), " auto" if _auto_scale else "", RenderingServer.get_current_rendering_method(),
+	var vp_rid := get_viewport().get_viewport_rid()
+	var draws := RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME)
+	var cpu_ms := RenderingServer.viewport_get_measured_render_time_cpu(vp_rid) + Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
+	var gpu_ms := RenderingServer.viewport_get_measured_render_time_gpu(vp_rid)
+	hud.stats_text = "%d fps  p95 %.1f ms | cpu %.1f ms  gpu %.1f ms | draws %d | 3D %d%%%s | %s" % [
+		Engine.get_frames_per_second(), p95, cpu_ms, gpu_ms, draws, roundi(_scale * 100),
+		" auto" if _auto_scale else "", RenderingServer.get_current_rendering_method()]
+	hud.stats_text += "\nchunks %d  columns %d  tris %dk | gen %.1f ms  mesh %.1f ms  queue %d | %s %dpx" % [
 		s.chunks, s.meshes, s.triangles / 1000, s.gen_ms, s.mesh_ms, s.queue,
 		Settings.get_value("texture_pack"), Textures.resolution]

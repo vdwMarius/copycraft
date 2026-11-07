@@ -9,9 +9,8 @@ signal open_blocks
 
 const LOOK_TAP_TIME := 0.3      # a touch released sooner than this (without dragging) places
 const LOOK_TAP_SLOP := 16.0     # moving further than this turns the touch into camera look
-const HOLD_START := 0.18        # hold this long before the break preview appears
-const BREAK_TIME := 0.38        # then this long to break, Minecraft style
-const BREAK_REPEAT := 0.3       # keep holding to keep breaking
+const HOLD_START := 0.2         # a still finger held this long starts breaking
+const BREAK_COOLDOWN := 0.3     # pause after each broken block before the next one starts
 
 var player: Player
 var builder: Builder
@@ -37,6 +36,9 @@ var _safe := Rect2()
 var _hotbar_rects: Array[Rect2] = []
 var _break_progress := 0.0     # 0..1 ring around the held finger
 var _broke_this_touch := false
+var _breaking := false          # this touch has turned into a break (view no longer turns)
+var _break_key := AABB()        # the piece being broken; progress resets if it changes
+var _cooldown := 0.0
 var _toast := ""
 var _toast_time := 0.0
 
@@ -120,7 +122,7 @@ func _layout() -> void:
 		"pick": {"pos": Vector2(r.end.x - m - 458, r.position.y + m + 40), "r": 38.0, "label": "PICK"},
 	}
 	# Break progress ring around the held finger.
-	if _break_progress > 0.0 and _look_index >= 0:
+	if _breaking and _look_index >= 0:
 		draw_arc(_look_last, 46.0, 0, TAU, 40, Color(0, 0, 0, 0.35), 8.0)
 		draw_arc(_look_last, 46.0, -PI * 0.5, -PI * 0.5 + TAU * _break_progress, 40, Color(1, 0.55, 0.35, 0.95), 8.0)
 	# Hotbar centred at the bottom.
@@ -158,30 +160,49 @@ func _process(delta: float) -> void:
 		queue_redraw()
 
 
-## Hold-to-break: a finger resting on the view previews, then breaks, then keeps breaking.
+## Hold-to-break, Minecraft style: a still finger held for HOLD_START starts breaking the
+## piece under it. Break time depends on the material's hardness and the piece size;
+## after each break there is a short cooldown before the next piece starts.
 func _update_hold(delta: float) -> void:
-	if _look_index < 0 or _look_moved >= LOOK_TAP_SLOP:
+	if _look_index < 0:
 		if builder.aim_screen.x >= 0.0:
 			_end_hold()
 		return
-	var held := Time.get_ticks_msec() / 1000.0 - _look_time
-	if held < HOLD_START:
-		return
+	if not _breaking:
+		var held := Time.get_ticks_msec() / 1000.0 - _look_time
+		if _look_moved >= LOOK_TAP_SLOP or held < HOLD_START:
+			return   # still a tap, or it became a camera drag
+		_breaking = true
+		_break_progress = 0.0
 	builder.aim_screen = _look_last
-	builder.breaking = true
-	_break_progress += delta / (BREAK_TIME if not _broke_this_touch else BREAK_REPEAT)
+	if _cooldown > 0.0:
+		_cooldown -= delta
+		queue_redraw()
+		return
+	var info := builder.break_info_at_screen(_look_last)
+	if info.is_empty():
+		_break_progress = 0.0
+		queue_redraw()
+		return
+	if info.box != _break_key:
+		_break_key = info.box   # swiped onto a different piece: start over
+		_break_progress = 0.0
+	_break_progress += delta / info.time
 	if _break_progress >= 1.0:
 		_break_progress = 0.0
+		_break_key = AABB()
 		if builder.break_at_screen(_look_last):
 			_broke_this_touch = true
+			_cooldown = BREAK_COOLDOWN
 			Input.vibrate_handheld(18)
 	queue_redraw()
 
 
 func _end_hold() -> void:
 	_break_progress = 0.0
+	_breaking = false
+	_break_key = AABB()
 	builder.aim_screen = Vector2(-1, -1)
-	builder.breaking = false
 	queue_redraw()
 
 
@@ -248,6 +269,8 @@ func _touch(e: InputEventScreenTouch) -> void:
 			_look_moved = 0.0
 			_break_progress = 0.0
 			_broke_this_touch = false
+			_breaking = false
+			_cooldown = 0.0
 		get_viewport().set_input_as_handled()
 	else:
 		if _held.has(e.index):
@@ -258,7 +281,7 @@ func _touch(e: InputEventScreenTouch) -> void:
 			_look_index = -1
 			var dt := Time.get_ticks_msec() / 1000.0 - _look_time
 			# Tap = place. A hold that already broke something never places on release.
-			if dt < LOOK_TAP_TIME and _look_moved < LOOK_TAP_SLOP and not _broke_this_touch:
+			if dt < LOOK_TAP_TIME and _look_moved < LOOK_TAP_SLOP and not _breaking and not _broke_this_touch:
 				builder.place_at_screen(p)
 			_end_hold()
 		queue_redraw()
@@ -272,7 +295,10 @@ func _drag(e: InputEventScreenDrag) -> void:
 		var d := e.position - _look_last
 		_look_last = e.position
 		_look_moved += d.length()
-		player.look(d * 1.2)
+		# Once a touch is breaking, swiping moves the break to the block under the
+		# finger (progress restarts) instead of turning the camera.
+		if not _breaking:
+			player.look(d * 1.2)
 
 
 func _press(b: String) -> void:
@@ -383,7 +409,7 @@ func _draw() -> void:
 			"snap": label = Pieces.SNAPS[builder.snap_index][0]
 		_text_centered(label, b.pos, 18 if label.length() > 5 else 22)
 	# Break progress ring around the held finger.
-	if _break_progress > 0.0 and _look_index >= 0:
+	if _breaking and _look_index >= 0:
 		draw_arc(_look_last, 46.0, 0, TAU, 40, Color(0, 0, 0, 0.35), 8.0)
 		draw_arc(_look_last, 46.0, -PI * 0.5, -PI * 0.5 + TAU * _break_progress, 40, Color(1, 0.55, 0.35, 0.95), 8.0)
 	# Hotbar
@@ -402,7 +428,8 @@ func _draw() -> void:
 	var mode_txt := "Tap: place %s %s   ·   Hold: break" % [Blocks.names[builder.block_id], Pieces.LIST[builder.piece][0].to_lower()]
 	_text_centered(mode_txt, Vector2(center.x, _hotbar_rects[0].position.y - 22), 20)
 	if Settings.get_value("show_stats"):
-		draw_string(_font, _safe.position + Vector2(16, 34), stats_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1, 1, 1, 0.9))
+		draw_multiline_string_outline(_font, _safe.position + Vector2(16, 30), stats_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, -1, 4, Color(0, 0, 0, 0.6))
+		draw_multiline_string(_font, _safe.position + Vector2(16, 30), stats_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 17, -1, Color(1, 1, 1, 0.92))
 	if _toast_time > 0.0:
 		_text_centered(_toast, Vector2(center.x, center.y - 120), 30, Color(1, 1, 1, clampf(_toast_time, 0, 1)))
 

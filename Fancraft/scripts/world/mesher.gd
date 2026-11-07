@@ -40,6 +40,7 @@ var _flip := []
 var _mask := PackedInt32Array()
 var out := []
 var collision := PackedVector3Array()
+var _yoff := Vector3.ZERO
 
 
 func _init(tables: Dictionary) -> void:
@@ -60,7 +61,10 @@ static func tables_from(blocks: Node) -> Dictionary:
 	}
 
 
-func build(neigh: Array) -> Dictionary:
+## `y_offset` shifts render vertices (not collision) so chunks of one column can be
+## merged into a single mesh positioned at the column origin.
+func build(neigh: Array, y_offset := 0.0) -> Dictionary:
+	_yoff = Vector3(0, y_offset, 0)
 	_fill_pad(neigh)
 	out = [Buf.new(), Buf.new(), Buf.new()]
 	collision = PackedVector3Array()
@@ -374,7 +378,9 @@ class Buf:
 	var cols := PackedColorArray()
 	var idx := PackedInt32Array()
 
-	func add(c0: Vector3, c1: Vector3, c2: Vector3, c3: Vector3, n: Vector3, uv: Vector2, ao: PackedInt32Array, tri: PackedInt32Array) -> void:
+	## COLOR.r = ambient occlusion, COLOR.g = face top height mod 1 (side faces), used
+	## to anchor textures like the grass lip to the top of short terrace faces.
+	func add(c0: Vector3, c1: Vector3, c2: Vector3, c3: Vector3, n: Vector3, uv: Vector2, ao: PackedInt32Array, tri: PackedInt32Array, top_mod: float) -> void:
 		var base := verts.size()
 		verts.append(c0)
 		verts.append(c1)
@@ -384,7 +390,7 @@ class Buf:
 			norms.append(n)
 			uvs.append(uv)
 			var a: float = AO_CURVE[ao[i]]
-			cols.append(Color(a, a, a, 1.0))
+			cols.append(Color(a, top_mod, 0.0, 1.0))
 		for t in tri:
 			idx.append(base + t)
 
@@ -406,8 +412,38 @@ func _quad(mode: int, o: Vector3, f: int, su: float, sv: float, layer: int, emis
 	# Flip the split diagonal so AO interpolates without creases.
 	var alt := 1 if ao[0] + ao[2] < ao[1] + ao[3] else 0
 	var tri: PackedInt32Array = TRI_A[alt] if _flip[f] else TRI_B[alt]
-	out[mode].add(c0, c1, c2, c3, Vector3(NORMALS[f]), Vector2(layer, emis), ao, tri)
+	var top_mod := fposmod(c2.y, 1.0) if f != 2 and f != 3 else 0.0
+	out[mode].add(c0 + _yoff, c1 + _yoff, c2 + _yoff, c3 + _yoff, Vector3(NORMALS[f]), Vector2(layer, emis), ao, tri, top_mod)
 	if is_solid:
 		var corners := [c0, c1, c2, c3]
 		for t in tri:
 			collision.append(corners[t])
+
+
+## Concatenate several chunks' passes into one set of arrays per pass (indices shifted).
+static func merge_passes(parts: Array) -> Array:
+	var merged := []
+	for pass_i in 3:
+		var verts := PackedVector3Array()
+		var norms := PackedVector3Array()
+		var uvs := PackedVector2Array()
+		var cols := PackedColorArray()
+		var idx := PackedInt32Array()
+		for part in parts:
+			var p: Dictionary = part[pass_i]
+			if p.verts.is_empty():
+				continue
+			var base := verts.size()
+			verts.append_array(p.verts)
+			norms.append_array(p.norms)
+			uvs.append_array(p.uvs)
+			cols.append_array(p.cols)
+			if base == 0:
+				idx.append_array(p.idx)
+			else:
+				var shifted: PackedInt32Array = p.idx.duplicate()
+				for i in shifted.size():
+					shifted[i] += base
+				idx.append_array(shifted)
+		merged.append({"verts": verts, "norms": norms, "uvs": uvs, "cols": cols, "idx": idx})
+	return merged
