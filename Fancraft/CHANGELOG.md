@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.4.0: performance and Minecraft-style building
+
+Phone report on 0.2.0 at max settings: 50–70 fps (sometimes 90), lowest near water, and
+about 20 fps with 512 px textures.
+
+**Performance**
+- **Auto 3D resolution, now the default in every preset.** It scales 3D render resolution
+  (50–100%, with FSR upscaling) to hold the frame-rate target. It uses GPU render time when
+  the driver reports it, otherwise missed frames, and changes are rate-limited. Max settings
+  previously rendered at the panel's full resolution (about 3120×1440) with 4× MSAA.
+- **Water, glass and crystal** now light themselves cheaply in the shader instead of going
+  through the full lit-transparency path (per-light and shadow sampling for every water pixel).
+- **Parallax** samples height one mip level coarser (half the bandwidth, which matters most
+  at 256/512 px) and uses fewer steps with distance.
+- **Presets rebalanced:** MSAA capped at 2×, the high shadow setting uses 2 cascades instead
+  of 4, and the stats overlay shows the current 3D resolution. Saved settings from older
+  versions are migrated to Auto resolution once.
+
+**Building**
+- **Tap to place, hold to break, like Minecraft.** A ring fills around your finger; keep
+  holding to keep breaking. A hold never places and a tap never breaks. The BUILD and MODE
+  buttons are gone, and the preview follows your finger while you hold.
+- Pieces lift up to 3 quarters along the surface when the ground next to them is slightly
+  higher, so blocks place reliably on quarter-terraced terrain.
+- Snap now defaults to Block (grid-aligned like Minecraft); Half and Quarter are on the SNAP button.
+- New headless input regression test (`-- --inputtest`) simulates a finger holding and tapping.
+
 ## 0.3.0: art direction from the reference images
 
 Target style is `docs/art-reference/03-target-style-scene.jpg`, with the rock and tree sheets as material references.

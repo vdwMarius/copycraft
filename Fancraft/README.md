@@ -18,16 +18,14 @@ builds install over earlier ones as long as they are signed with the same debug 
 | Where | What |
 | --- | --- |
 | Left half | Floating joystick. Push to the edge to sprint. |
-| Right half | Drag to look. A quick **tap** builds or breaks at the spot you tapped. |
-| BUILD / BREAK | Acts at the crosshair. |
-| MODE (BLD/BRK) | Switches between building and breaking. |
+| Right half | Drag to look. **Tap** places the selected piece where you tap; **hold** breaks (a ring fills, keep holding to keep breaking). |
 | PIECE | Block → Slab → Thin slab → Half cube → Quarter → Pillar → Beam → Panel → Post |
 | ROT | Rotates the piece (turned, or laid on its side). |
 | SNAP | Quarter / Half / Block: how pieces line up on the surface you touch. |
 | PICK | Copies the material under the crosshair. |
 | Hotbar / ALL | Picks a material, or opens the full material grid. |
 | FLY / DOWN | Creative flight. JUMP rises; DOWN descends. |
-| MENU | Quality presets, frame-rate cap (up to 120), view distance, render scale, texture resolution (16–512), 3D surface depth, shadows, anti-aliasing, and the texture pack manager. |
+| MENU | Quality presets, frame-rate cap (up to 120), view distance, 3D resolution (Auto by default), texture resolution (16–512), 3D surface depth, shadows, anti-aliasing, and the texture pack manager. |
 
 Pieces are placed flush against the surface you touch, so half a block can sit on top of
 another half, straddle two cells, or overhang. Breaking removes a piece-sized region.

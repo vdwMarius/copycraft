@@ -12,8 +12,10 @@ var player: Player
 var block_id := 7
 var piece := 0
 var rotation_index := 0
-var snap_index := 1
+var snap_index := 2
 var breaking := false
+## Screen point to aim at while a finger is held on the view (x < 0: use the crosshair).
+var aim_screen := Vector2(-1, -1)
 
 var _ghost: MeshInstance3D
 var _ghost_mat: StandardMaterial3D
@@ -73,8 +75,12 @@ func snap_step() -> int:
 func _process(_delta: float) -> void:
 	if player == null or world == null:
 		return
-	var ray := player.eye_ray()
-	_target = raycast(ray[0], ray[1])
+	if aim_screen.x >= 0.0:
+		var cam := player.camera
+		_target = raycast(cam.project_ray_origin(aim_screen), cam.project_ray_normal(aim_screen))
+	else:
+		var ray := player.eye_ray()
+		_target = raycast(ray[0], ray[1])
 	_update_ghost()
 
 
@@ -109,6 +115,13 @@ func _update_ghost() -> void:
 		_edge.visible = false
 		return
 	var box := current_box(_target)
+	if not breaking:
+		for lift in 4:
+			var b := box
+			b.position += _target.normal * lift
+			if not world.box_has_solid(b):
+				box = b
+				break
 	var pos := box.position * 0.25
 	var size := box.size * 0.25
 	var grow := 0.006
@@ -130,9 +143,37 @@ func act(target := {}) -> bool:
 	var box := current_box(target)
 	if breaking:
 		return world.edit_box(box, 0) > 0
-	if world.box_has_solid(box) or _overlaps_player(box):
-		return false
-	return world.edit_box(box, block_id) > 0
+	# On quarter-terraced ground a piece often clips the slightly higher terrain next
+	# to it; nudge it out along the surface normal (up to 3 quarters) until it fits.
+	var n: Vector3 = target.normal
+	for lift in 4:
+		var b := box
+		b.position += n * lift
+		if not world.box_has_solid(b) and not _overlaps_player(b):
+			return world.edit_box(b, block_id) > 0
+	return false
+
+
+## Place (tap) or remove (hold) at a screen position.
+func place_at_screen(screen_pos: Vector2) -> bool:
+	var was := breaking
+	breaking = false
+	var ok := act_at_screen(screen_pos)
+	breaking = was
+	return ok
+
+
+func break_at_screen(screen_pos: Vector2) -> bool:
+	var was := breaking
+	breaking = true
+	var ok := act_at_screen(screen_pos)
+	breaking = was
+	return ok
+
+
+func has_target_at_screen(screen_pos: Vector2) -> bool:
+	var cam := player.camera
+	return not raycast(cam.project_ray_origin(screen_pos), cam.project_ray_normal(screen_pos)).is_empty()
 
 
 ## Act at a screen position (tap-to-build).

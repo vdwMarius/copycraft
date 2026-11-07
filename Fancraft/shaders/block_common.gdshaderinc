@@ -15,6 +15,9 @@ uniform bool pom_shadows = false;
 uniform vec3 sun_dir = vec3(0.45, 0.75, 0.35);
 uniform float water_layer = 11.0;
 uniform float cavity_strength = 0.75;
+uniform vec3 sun_color = vec3(1.0, 0.9, 0.74);
+uniform vec3 ambient_color = vec3(0.55, 0.66, 0.8);
+uniform vec3 sky_reflect = vec3(0.62, 0.86, 0.98);
 
 varying vec3 w_pos;
 varying vec3 w_nrm;
@@ -35,7 +38,9 @@ void vertex() {
 }
 
 float depth_at(vec2 uv, vec2 dx, vec2 dy) {
-	return 1.0 - textureGrad(surface_tex, vec3(uv, v_layer), dx, dy).a;
+	// Sampled one mip level coarser than the colour: height is smooth, and this halves
+	// the bandwidth of the parallax loop (matters most with 256/512 px packs).
+	return 1.0 - textureGrad(surface_tex, vec3(uv, v_layer), dx * 2.0, dy * 2.0).a;
 }
 
 void fragment() {
@@ -69,7 +74,7 @@ void fragment() {
 	vec2 puv = uv;
 #ifdef PASS_OPAQUE
 	if (pom_steps > 0 && fade > 0.02) {
-		float steps = mix(4.0, float(pom_steps), 1.0 - vn);
+		float steps = max(3.0, mix(4.0, float(pom_steps), 1.0 - vn) * fade);
 		int n = int(steps);
 		float layer_d = 1.0 / steps;
 		vec2 vuv = vec2(dot(V, T), dot(V, Bv));
@@ -135,12 +140,23 @@ void fragment() {
 	BACKLIGHT = alb.rgb * 0.3;
 #endif
 #ifdef PASS_TRANSLUCENT
+	// Translucent pass is unshaded: lighting is computed here in a few instructions
+	// instead of the full per-light/shadow pipeline. Water fills the screen when you
+	// stand near it, so this is where fill-rate matters most.
+	vec3 L = normalize(sun_dir);
 	float fres = pow(1.0 - vn, 3.0);
-	ALPHA = clamp(mix(alb.a, 1.0, fres * 0.7), 0.0, 1.0);
-	if (is_water) {
-		ROUGHNESS = 0.04;
-		SPECULAR = 0.7;
+	float diff = max(dot(wn, L), 0.0) * 0.5 + 0.5;
+	vec3 col = alb.rgb * (ambient_color + sun_color * diff * 0.75);
+	vec3 R = reflect(-L, wn);
+	float gloss = 1.0 - surf.b;
+	float spec = smoothstep(0.6, 0.75, pow(max(dot(R, V), 0.0), 48.0)) * gloss;
+	col = mix(col, sky_reflect, fres * (is_water ? 0.55 : 0.3));
+	col += sun_color * spec * 0.9;
+	if (v_emis > 0.0) {
+		col += alb.rgb * v_emis * (0.75 + 0.25 * sin(TIME * 1.7 + w_pos.y * 2.0));
 	}
+	ALBEDO = col;
+	ALPHA = clamp(mix(alb.a, 1.0, fres * 0.7) + spec, 0.0, 1.0);
 #endif
 }
 

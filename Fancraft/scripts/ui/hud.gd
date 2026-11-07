@@ -7,8 +7,11 @@ extends Control
 signal open_settings
 signal open_blocks
 
-const LOOK_TAP_TIME := 0.22
-const LOOK_TAP_SLOP := 14.0
+const LOOK_TAP_TIME := 0.3      # a touch released sooner than this (without dragging) places
+const LOOK_TAP_SLOP := 16.0     # moving further than this turns the touch into camera look
+const HOLD_START := 0.18        # hold this long before the break preview appears
+const BREAK_TIME := 0.38        # then this long to break, Minecraft style
+const BREAK_REPEAT := 0.3       # keep holding to keep breaking
 
 var player: Player
 var builder: Builder
@@ -32,6 +35,8 @@ var _icons := {}             # block id -> Texture2D
 var _font: Font
 var _safe := Rect2()
 var _hotbar_rects: Array[Rect2] = []
+var _break_progress := 0.0     # 0..1 ring around the held finger
+var _broke_this_touch := false
 var _toast := ""
 var _toast_time := 0.0
 
@@ -106,8 +111,6 @@ func _layout() -> void:
 	var br := r.end - Vector2(m, m)
 	_buttons = {
 		"jump": {"pos": br + Vector2(-95, -105), "r": 72.0, "label": "JUMP"},
-		"act": {"pos": br + Vector2(-255, -70), "r": 60.0, "label": "BUILD"},
-		"mode": {"pos": br + Vector2(-250, -215), "r": 46.0, "label": "MODE"},
 		"fly": {"pos": br + Vector2(-95, -275), "r": 44.0, "label": "FLY"},
 		"down": {"pos": br + Vector2(-210, -330), "r": 44.0, "label": "DOWN"},
 		"settings": {"pos": Vector2(r.end.x - m - 40, r.position.y + m + 40), "r": 38.0, "label": "MENU"},
@@ -116,6 +119,10 @@ func _layout() -> void:
 		"snap": {"pos": Vector2(r.end.x - m - 360, r.position.y + m + 40), "r": 38.0, "label": "SNAP"},
 		"pick": {"pos": Vector2(r.end.x - m - 458, r.position.y + m + 40), "r": 38.0, "label": "PICK"},
 	}
+	# Break progress ring around the held finger.
+	if _break_progress > 0.0 and _look_index >= 0:
+		draw_arc(_look_last, 46.0, 0, TAU, 40, Color(0, 0, 0, 0.35), 8.0)
+		draw_arc(_look_last, 46.0, -PI * 0.5, -PI * 0.5 + TAU * _break_progress, 40, Color(1, 0.55, 0.35, 0.95), 8.0)
 	# Hotbar centred at the bottom.
 	_hotbar_rects.clear()
 	var slot := 64.0
@@ -144,10 +151,38 @@ func _process(delta: float) -> void:
 	else:
 		player.move_input = Vector2.ZERO
 		player.sprint = false
+	_update_hold(delta)
 	player.jump_held = _is_held("jump")
 	player.down_held = _is_held("down")
 	if Settings.get_value("show_stats"):
 		queue_redraw()
+
+
+## Hold-to-break: a finger resting on the view previews, then breaks, then keeps breaking.
+func _update_hold(delta: float) -> void:
+	if _look_index < 0 or _look_moved >= LOOK_TAP_SLOP:
+		if builder.aim_screen.x >= 0.0:
+			_end_hold()
+		return
+	var held := Time.get_ticks_msec() / 1000.0 - _look_time
+	if held < HOLD_START:
+		return
+	builder.aim_screen = _look_last
+	builder.breaking = true
+	_break_progress += delta / (BREAK_TIME if not _broke_this_touch else BREAK_REPEAT)
+	if _break_progress >= 1.0:
+		_break_progress = 0.0
+		if builder.break_at_screen(_look_last):
+			_broke_this_touch = true
+			Input.vibrate_handheld(18)
+	queue_redraw()
+
+
+func _end_hold() -> void:
+	_break_progress = 0.0
+	builder.aim_screen = Vector2(-1, -1)
+	builder.breaking = false
+	queue_redraw()
 
 
 func _is_held(name: String) -> bool:
@@ -211,6 +246,8 @@ func _touch(e: InputEventScreenTouch) -> void:
 			_look_start = p
 			_look_time = Time.get_ticks_msec() / 1000.0
 			_look_moved = 0.0
+			_break_progress = 0.0
+			_broke_this_touch = false
 		get_viewport().set_input_as_handled()
 	else:
 		if _held.has(e.index):
@@ -220,8 +257,10 @@ func _touch(e: InputEventScreenTouch) -> void:
 		if e.index == _look_index:
 			_look_index = -1
 			var dt := Time.get_ticks_msec() / 1000.0 - _look_time
-			if dt < LOOK_TAP_TIME and _look_moved < LOOK_TAP_SLOP:
-				builder.act_at_screen(p)
+			# Tap = place. A hold that already broke something never places on release.
+			if dt < LOOK_TAP_TIME and _look_moved < LOOK_TAP_SLOP and not _broke_this_touch:
+				builder.place_at_screen(p)
+			_end_hold()
 		queue_redraw()
 
 
@@ -238,10 +277,6 @@ func _drag(e: InputEventScreenDrag) -> void:
 
 func _press(b: String) -> void:
 	match b:
-		"act":
-			builder.act()
-		"mode":
-			builder.breaking = not builder.breaking
 		"fly":
 			player.toggle_fly()
 			toast("Flying" if player.flying else "Walking")
@@ -309,7 +344,6 @@ func _desktop_key(e: InputEventKey) -> void:
 		KEY_R: _press("rotate")
 		KEY_T: _press("piece")
 		KEY_G: _press("snap")
-		KEY_B: _press("mode")
 		KEY_TAB: open_blocks.emit()
 		KEY_M: open_settings.emit()
 		_:
@@ -340,16 +374,18 @@ func _draw() -> void:
 		if name == "down" and not player.flying:
 			continue
 		var b: Dictionary = _buttons[name]
-		var active: bool = _is_held(name) or (name == "fly" and player.flying) or (name == "mode" and builder.breaking)
+		var active: bool = _is_held(name) or (name == "fly" and player.flying)
 		draw_circle(b.pos, b.r, Color(0.08, 0.1, 0.14, 0.55) if not active else Color(0.35, 0.75, 1.0, 0.6))
 		draw_arc(b.pos, b.r, 0, TAU, 40, Color(1, 1, 1, 0.5), 2.5)
 		var label: String = b.label
 		match name:
-			"act": label = "BREAK" if builder.breaking else "BUILD"
-			"mode": label = "BRK" if builder.breaking else "BLD"
 			"piece": label = Pieces.LIST[builder.piece][0]
 			"snap": label = Pieces.SNAPS[builder.snap_index][0]
 		_text_centered(label, b.pos, 18 if label.length() > 5 else 22)
+	# Break progress ring around the held finger.
+	if _break_progress > 0.0 and _look_index >= 0:
+		draw_arc(_look_last, 46.0, 0, TAU, 40, Color(0, 0, 0, 0.35), 8.0)
+		draw_arc(_look_last, 46.0, -PI * 0.5, -PI * 0.5 + TAU * _break_progress, 40, Color(1, 0.55, 0.35, 0.95), 8.0)
 	# Hotbar
 	for i in _hotbar_rects.size():
 		var rc := _hotbar_rects[i]
@@ -363,7 +399,7 @@ func _draw() -> void:
 		var sel := i == selected_slot
 		draw_rect(rc, Color(1, 0.9, 0.5, 1) if sel else Color(1, 1, 1, 0.35), false, 4.0 if sel else 2.0)
 	# Piece / mode readout
-	var mode_txt := "%s  |  %s  |  %s" % ["BREAK" if builder.breaking else "BUILD", Pieces.LIST[builder.piece][0], Blocks.names[builder.block_id]]
+	var mode_txt := "Tap: place %s %s   ·   Hold: break" % [Blocks.names[builder.block_id], Pieces.LIST[builder.piece][0].to_lower()]
 	_text_centered(mode_txt, Vector2(center.x, _hotbar_rects[0].position.y - 22), 20)
 	if Settings.get_value("show_stats"):
 		draw_string(_font, _safe.position + Vector2(16, 34), stats_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1, 1, 1, 0.9))

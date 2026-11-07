@@ -157,7 +157,7 @@ func open_settings() -> void:
 	_row(b, "Quality preset", presets)
 	_choice(b, "Frame rate cap", "fps_target", [["30", 30], ["60", 60], ["90", 90], ["120", 120], ["Max", 0]])
 	_choice(b, "View distance", "render_distance", [["3", 3], ["4", 4], ["6", 6], ["8", 8], ["10", 10], ["12", 12]])
-	_choice(b, "Render scale", "render_scale", [["50%", 0.5], ["67%", 0.67], ["75%", 0.75], ["90%", 0.9], ["100%", 1.0]])
+	_choice(b, "3D resolution", "render_scale", [["Auto", -1.0], ["50%", 0.5], ["67%", 0.67], ["75%", 0.75], ["90%", 0.9], ["100%", 1.0]])
 	_choice(b, "Texture resolution", "texture_resolution", [["16", 16], ["32", 32], ["64", 64], ["128", 128], ["256", 256], ["512", 512], ["Pack", 0]])
 	_choice(b, "3D surface depth", "parallax", [["Off", 0], ["Low", 1], ["Medium", 2], ["High", 3]])
 	_choice(b, "Shadows", "shadows", [["Off", 0], ["Low", 1], ["High", 2]])
@@ -172,7 +172,7 @@ func open_settings() -> void:
 	_heading(b, "Controls")
 	var help := Label.new()
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	help.text = "Left side: move (push to the edge to sprint). Right side: drag to look, tap to build/break at that spot. BUILD button acts at the crosshair. MODE switches build/break. PIECE cycles shapes, ROT turns them, SNAP sets how pieces align (quarter / half / block). PICK copies the material you are looking at. Desktop: WASD, mouse, LMB break, RMB place, R rotate, T piece, G snap, F fly, Tab blocks, M menu."
+	help.text = "Left side: move (push to the edge to sprint). Right side: drag to look. TAP to place the selected piece where you tap; HOLD to break (a ring fills, then keep holding to keep breaking). PIECE cycles shapes, ROT turns them, SNAP sets alignment (quarter / half / block), PICK copies the material you look at. 3D resolution Auto keeps your frame-rate target by scaling render resolution. Desktop: WASD, mouse, LMB break, RMB place, R rotate, T piece, G snap, F fly, Tab blocks, M menu."
 	b.add_child(help)
 	visible = true
 

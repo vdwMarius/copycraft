@@ -4,11 +4,12 @@ extends Node
 signal changed(key: String)
 
 const PATH := "user://settings.cfg"
+const VERSION := 2   # bump to migrate saved settings
 
 const DEFAULTS := {
 	"fps_target": 120,           # 30 / 60 / 90 / 120 / 0 (unlimited)
 	"render_distance": 6,        # chunk radius
-	"render_scale": 1.0,         # 3D resolution scale (0.5..1.0)
+	"render_scale": -1.0,        # 3D resolution scale (0.5..1.0), -1 = auto
 	"texture_resolution": 128,   # 16 / 32 / 64 / 128 / 256 / 512
 	"texture_pack": "fancraft_default",
 	"parallax": 2,               # 0 off, 1 low, 2 medium, 3 high
@@ -20,10 +21,10 @@ const DEFAULTS := {
 }
 
 const PRESETS := {
-	"Performance": {"fps_target": 60, "render_distance": 4, "render_scale": 0.75, "texture_resolution": 32, "parallax": 0, "shadows": 0, "glow": false, "msaa": 0},
-	"Balanced": {"fps_target": 60, "render_distance": 6, "render_scale": 0.9, "texture_resolution": 64, "parallax": 1, "shadows": 1, "glow": true, "msaa": 1},
-	"Ultra 120": {"fps_target": 120, "render_distance": 8, "render_scale": 1.0, "texture_resolution": 256, "parallax": 2, "shadows": 1, "glow": true, "msaa": 1},
-	"Max Fidelity": {"fps_target": 120, "render_distance": 10, "render_scale": 1.0, "texture_resolution": 256, "parallax": 3, "shadows": 2, "glow": true, "msaa": 2},
+	"Performance": {"fps_target": 60, "render_distance": 4, "render_scale": -1.0, "texture_resolution": 32, "parallax": 0, "shadows": 0, "glow": false, "msaa": 0},
+	"Balanced": {"fps_target": 60, "render_distance": 6, "render_scale": -1.0, "texture_resolution": 128, "parallax": 1, "shadows": 1, "glow": true, "msaa": 0},
+	"Ultra 120": {"fps_target": 120, "render_distance": 8, "render_scale": -1.0, "texture_resolution": 256, "parallax": 2, "shadows": 1, "glow": true, "msaa": 1},
+	"Max Fidelity": {"fps_target": 120, "render_distance": 10, "render_scale": -1.0, "texture_resolution": 512, "parallax": 3, "shadows": 2, "glow": true, "msaa": 1},
 }
 
 var values := {}
@@ -38,6 +39,11 @@ func _init() -> void:
 				var v = cfg.get_value("settings", key)
 				if typeof(v) == typeof(DEFAULTS[key]) or (typeof(v) in [TYPE_INT, TYPE_FLOAT] and typeof(DEFAULTS[key]) in [TYPE_INT, TYPE_FLOAT]):
 					values[key] = v
+		if int(cfg.get_value("meta", "version", 1)) < 2:
+			# 0.4.0: switch to auto resolution and cap MSAA at 2x (full-res 4x MSAA could not hold 120 fps).
+			values["render_scale"] = -1.0
+			values["msaa"] = mini(int(values["msaa"]), 1)
+			save()
 	else:
 		values.merge(_first_run_preset(), true)
 
@@ -63,6 +69,7 @@ func apply_preset(preset: String) -> void:
 
 func save() -> void:
 	var cfg := ConfigFile.new()
+	cfg.set_value("meta", "version", VERSION)
 	for key in values:
 		cfg.set_value("settings", key, values[key])
 	cfg.save(PATH)

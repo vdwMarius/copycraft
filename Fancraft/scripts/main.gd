@@ -13,6 +13,14 @@ var hud: Hud
 var menus: Menus
 var block_mats: BlockMaterials
 var _fps_hist := PackedFloat32Array()
+var _scale := 1.0
+var _auto_scale := false
+var _auto_t := 0.0
+var _auto_frames := 0
+var _auto_missed := 0
+var _auto_ceiling := 1.0
+var _auto_ceiling_until := 0.0
+var _auto_last_up := 0.0
 var _loading: Label
 
 
@@ -51,9 +59,12 @@ func _ready() -> void:
 	_loading.set_anchors_preset(Control.PRESET_CENTER)
 	layer.add_child(_loading)
 	world.spawn_ready.connect(_on_spawn)
+	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
 	Settings.changed.connect(_apply_setting)
 	for k in ["fps_target", "render_scale", "msaa", "shadows", "glow", "render_distance"]:
 		_apply_setting(k)
+	if "--inputtest" in OS.get_cmdline_user_args():
+		add_child(load("res://scripts/dev/input_test.gd").new())
 	if "--stress" in OS.get_cmdline_user_args():
 		add_child(load("res://scripts/dev/stress.gd").new())
 	if "--capture" in OS.get_cmdline_user_args():
@@ -158,16 +169,16 @@ func _apply_setting(key: String) -> void:
 			Engine.max_fps = int(v)
 			DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
 		"render_scale":
-			vp.scaling_3d_scale = float(v)
-			vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR if float(v) >= 0.99 else Viewport.SCALING_3D_MODE_FSR
+			_auto_scale = float(v) < 0.0
+			_set_scale(0.8 if _auto_scale else float(v))
 		"msaa":
 			vp.msaa_3d = [Viewport.MSAA_DISABLED, Viewport.MSAA_2X, Viewport.MSAA_4X][clampi(int(v), 0, 2)]
 		"shadows":
 			var q := int(v)
 			sun.shadow_enabled = q > 0
 			sun.shadow_blur = 1.2
-			sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS if q == 1 else DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-			sun.directional_shadow_max_distance = 56.0 if q == 1 else 96.0
+			sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+			sun.directional_shadow_max_distance = 48.0 if q == 1 else 80.0
 			RenderingServer.directional_shadow_atlas_set_size(2048 if q == 1 else 4096, true)
 		"glow":
 			env.glow_enabled = bool(v)
@@ -178,7 +189,48 @@ func _apply_setting(key: String) -> void:
 			player.camera.far = far + 48.0
 
 
+func _set_scale(scale: float) -> void:
+	_scale = clampf(scale, 0.5, 1.0)
+	var vp := get_viewport()
+	vp.scaling_3d_scale = _scale
+	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR if _scale >= 0.99 else Viewport.SCALING_3D_MODE_FSR
+
+
+## Auto resolution: lower the 3D render scale when frames run over budget, and probe
+## upwards slowly when there is headroom. GPU render time is used when the driver reports
+## it; otherwise missed frames are the signal. Changes are rate-limited because each
+## one reallocates the render buffers.
+func _auto_resolution(delta: float) -> void:
+	if not _auto_scale or not player.controls_enabled:
+		return
+	var target: int = Settings.get_value("fps_target")
+	var budget := 1.0 / float(target if target > 0 else 120)
+	_auto_t += delta
+	_auto_frames += 1
+	if delta > budget * 1.3:
+		_auto_missed += 1
+	if _auto_t < 1.0:
+		return
+	var gpu_ms := RenderingServer.viewport_get_measured_render_time_gpu(get_viewport().get_viewport_rid())
+	var miss_ratio := float(_auto_missed) / maxf(_auto_frames, 1)
+	var now := Time.get_ticks_msec() / 1000.0
+	if miss_ratio > 0.1 or (gpu_ms > 0.0 and gpu_ms > budget * 1000.0 * 0.92):
+		_auto_ceiling = _scale
+		_auto_ceiling_until = now + 20.0
+		_set_scale(_scale - 0.05)
+	elif _scale < 1.0 and miss_ratio < 0.02:
+		var headroom := gpu_ms > 0.0 and gpu_ms < budget * 1000.0 * 0.7
+		var ceiling_ok := now > _auto_ceiling_until or _scale + 0.05 < _auto_ceiling
+		if ceiling_ok and (headroom or (gpu_ms <= 0.0 and now - _auto_last_up > 6.0)):
+			_auto_last_up = now
+			_set_scale(_scale + 0.05)
+	_auto_t = 0.0
+	_auto_frames = 0
+	_auto_missed = 0
+
+
 func _process(delta: float) -> void:
+	_auto_resolution(delta)
 	if not Settings.get_value("show_stats"):
 		return
 	_fps_hist.append(delta * 1000.0)
@@ -188,7 +240,7 @@ func _process(delta: float) -> void:
 	sorted.sort()
 	var p95 := sorted[int(sorted.size() * 0.95)] if sorted.size() > 10 else 0.0
 	var s := world.stats
-	hud.stats_text = "%d fps  p95 %.1f ms | %s | chunks %d meshes %d tris %dk | gen %.1f ms mesh %.1f ms queue %d | %s %dpx" % [
-		Engine.get_frames_per_second(), p95, RenderingServer.get_current_rendering_method(),
+	hud.stats_text = "%d fps  p95 %.1f ms | 3D %d%%%s | %s | chunks %d meshes %d tris %dk | gen %.1f ms mesh %.1f ms queue %d | %s %dpx" % [
+		Engine.get_frames_per_second(), p95, roundi(_scale * 100), " auto" if _auto_scale else "", RenderingServer.get_current_rendering_method(),
 		s.chunks, s.meshes, s.triangles / 1000, s.gen_ms, s.mesh_ms, s.queue,
 		Settings.get_value("texture_pack"), Textures.resolution]

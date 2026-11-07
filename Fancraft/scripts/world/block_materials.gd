@@ -6,7 +6,7 @@ extends RefCounted
 const RENDER_MODES := [
 	"cull_back, depth_draw_opaque, diffuse_lambert_wrap, specular_schlick_ggx",
 	"cull_disabled, depth_draw_opaque, diffuse_lambert_wrap, specular_schlick_ggx",
-	"blend_mix, cull_back, depth_draw_opaque, diffuse_lambert, specular_schlick_ggx",
+	"blend_mix, cull_back, depth_draw_opaque, unshaded",
 ]
 const PASS_DEFINES := ["PASS_OPAQUE", "PASS_CUTOUT", "PASS_TRANSLUCENT"]
 const POM_STEPS := [0, 8, 14, 24]
@@ -20,6 +20,7 @@ func _init() -> void:
 	for i in 3:
 		materials.append(ShaderMaterial.new())
 	materials[2].render_priority = 1
+	# The translucent pass never casts shadows (water/glass would darken what is below).
 	refresh()
 	Textures.textures_changed.connect(refresh)
 	Settings.changed.connect(func(k): if k == "parallax": refresh())
