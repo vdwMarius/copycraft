@@ -5,9 +5,9 @@ extends CharacterBody3D
 
 const GRAVITY := 26.0
 const JUMP_SPEED := 8.4
-const WALK_SPEED := 5.2
-const SPRINT_SPEED := 8.0
-const FLY_SPEED := 12.0
+const WALK_SPEED := 4.3      # Minecraft-like pacing (m/s)
+const SPRINT_SPEED := 5.6
+const FLY_SPEED := 10.9
 const STEP_HEIGHT := 0.55
 const EYE_HEIGHT := 1.6
 
@@ -91,7 +91,7 @@ func _physics_process(delta: float) -> void:
 	_in_water = world != null and Blocks.DEFS.get(world.get_block_at(global_position + Vector3(0, 0.9, 0)), [""])[0] == "water"
 
 	if flying:
-		var speed := FLY_SPEED * (1.8 if running else 1.0)
+		var speed := FLY_SPEED * (1.6 if running else 1.0)
 		var vert := (1.0 if jump else 0.0) - (1.0 if down else 0.0)
 		var target := wish * speed + Vector3.UP * vert * speed * 0.8
 		velocity = velocity.lerp(target, clampf(delta * 10.0, 0.0, 1.0))

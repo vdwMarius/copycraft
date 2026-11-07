@@ -20,6 +20,36 @@ var aim_screen := Vector2(-1, -1)
 var _target := {}   # {hit, normal} or empty
 
 
+var _cracks: MeshInstance3D
+var _crack_mat: ShaderMaterial
+
+
+func _ready() -> void:
+	_crack_mat = ShaderMaterial.new()
+	_crack_mat.shader = load("res://shaders/cracks.gdshader")
+	var box := BoxMesh.new()
+	box.size = Vector3.ONE
+	_cracks = MeshInstance3D.new()
+	_cracks.mesh = box
+	_cracks.material_override = _crack_mat
+	_cracks.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_cracks.visible = false
+	add_child(_cracks)
+
+
+## Show the cracking overlay on a piece (box in world quarter units), progress 0..1.
+func show_cracks(box: AABB, progress: float) -> void:
+	var size := box.size * 0.25
+	_cracks.position = box.position * 0.25 + size * 0.5
+	_cracks.scale = size + Vector3.ONE * 0.012
+	_crack_mat.set_shader_parameter("progress", progress)
+	_cracks.visible = true
+
+
+func hide_cracks() -> void:
+	_cracks.visible = false
+
+
 func piece_size() -> Vector3i:
 	return Pieces.oriented(Pieces.LIST[piece][1], rotation_index)
 

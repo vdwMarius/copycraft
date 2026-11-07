@@ -4,7 +4,7 @@ extends Node
 signal changed(key: String)
 
 const PATH := "user://settings.cfg"
-const VERSION := 2   # bump to migrate saved settings
+const VERSION := 3   # bump to migrate saved settings
 
 const DEFAULTS := {
 	"fps_target": 120,           # 30 / 60 / 90 / 120 / 0 (unlimited)
@@ -15,7 +15,7 @@ const DEFAULTS := {
 	"parallax": 2,               # 0 off, 1 low, 2 medium, 3 high
 	"shadows": 1,                # 0 off, 1 low, 2 high
 	"glow": true,
-	"msaa": 1,                   # 0 off, 1 2x, 2 4x
+	"msaa": 1,                   # 0 off, 1 2x
 	"look_sensitivity": 1.0,
 	"show_stats": true,
 }
@@ -42,6 +42,9 @@ func _init() -> void:
 		if int(cfg.get_value("meta", "version", 1)) < 2:
 			# 0.4.0: switch to auto resolution and cap MSAA at 2x (full-res 4x MSAA could not hold 120 fps).
 			values["render_scale"] = -1.0
+			values["msaa"] = mini(int(values["msaa"]), 1)
+		if int(cfg.get_value("meta", "version", 1)) < 3:
+			# 0.6.0: 4x MSAA removed (20-30 fps on the S26 Ultra).
 			values["msaa"] = mini(int(values["msaa"]), 1)
 			save()
 	else:

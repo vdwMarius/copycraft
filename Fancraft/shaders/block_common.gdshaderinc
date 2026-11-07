@@ -14,7 +14,9 @@ uniform float pom_fade_end = 20.0;
 uniform bool pom_shadows = false;
 uniform vec3 sun_dir = vec3(0.45, 0.75, 0.35);
 uniform float water_layer = 11.0;
-uniform float lip_layer = 1.0;   // grass_side: its grass lip is anchored to the face top
+uniform float lip_layer = 1.0;
+uniform float leaves_layer = 9.0;
+uniform vec3 leaf_gap_color : source_color = vec3(0.1, 0.26, 0.12);   // grass_side: its grass lip is anchored to the face top
 uniform float cavity_strength = 0.75;
 uniform vec3 sun_color = vec3(1.0, 0.9, 0.74);
 uniform vec3 ambient_color = vec3(0.55, 0.66, 0.8);
@@ -106,6 +108,12 @@ void fragment() {
 
 	vec4 alb = textureGrad(albedo_tex, vec3(puv, v_layer), dx, dy);
 	vec4 surf = textureGrad(surface_tex, vec3(puv, v_layer), dx, dy);
+#ifdef PASS_OPAQUE
+	if (abs(v_layer - leaves_layer) < 0.5) {
+		// Solid canopies: texture holes become deep shaded gaps between leaf clumps.
+		alb.rgb = mix(leaf_gap_color, alb.rgb, smoothstep(0.25, 0.65, alb.a));
+	}
+#endif
 	vec2 ns = surf.rg * 2.0 - 1.0;
 	float nz = sqrt(max(1.0 - dot(ns, ns), 0.0));
 	vec3 wn = normalize(T * ns.x - Bv * ns.y + N * nz);

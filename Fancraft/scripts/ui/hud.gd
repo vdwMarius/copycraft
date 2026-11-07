@@ -123,8 +123,9 @@ func _layout() -> void:
 	}
 	# Break progress ring around the held finger.
 	if _breaking and _look_index >= 0:
-		draw_arc(_look_last, 46.0, 0, TAU, 40, Color(0, 0, 0, 0.35), 8.0)
-		draw_arc(_look_last, 46.0, -PI * 0.5, -PI * 0.5 + TAU * _break_progress, 40, Color(1, 0.55, 0.35, 0.95), 8.0)
+		# Thumb-sized ring: sits around the fingertip rather than under it.
+		draw_arc(_look_last, 96.0, 0, TAU, 64, Color(0, 0, 0, 0.35), 14.0)
+		draw_arc(_look_last, 96.0, -PI * 0.5, -PI * 0.5 + TAU * clampf(_break_progress, 0.0, 1.0), 64, Color(1, 0.6, 0.35, 0.95), 12.0)
 	# Hotbar centred at the bottom.
 	_hotbar_rects.clear()
 	var slot := 64.0
@@ -177,18 +178,22 @@ func _update_hold(delta: float) -> void:
 	builder.aim_screen = _look_last
 	if _cooldown > 0.0:
 		_cooldown -= delta
+		builder.hide_cracks()
 		queue_redraw()
 		return
 	var info := builder.break_info_at_screen(_look_last)
 	if info.is_empty():
 		_break_progress = 0.0
+		builder.hide_cracks()
 		queue_redraw()
 		return
 	if info.box != _break_key:
 		_break_key = info.box   # swiped onto a different piece: start over
 		_break_progress = 0.0
 	_break_progress += delta / info.time
+	builder.show_cracks(info.box, _break_progress)
 	if _break_progress >= 1.0:
+		builder.hide_cracks()
 		_break_progress = 0.0
 		_break_key = AABB()
 		if builder.break_at_screen(_look_last):
@@ -199,6 +204,7 @@ func _update_hold(delta: float) -> void:
 
 
 func _end_hold() -> void:
+	builder.hide_cracks()
 	_break_progress = 0.0
 	_breaking = false
 	_break_key = AABB()
@@ -410,8 +416,9 @@ func _draw() -> void:
 		_text_centered(label, b.pos, 18 if label.length() > 5 else 22)
 	# Break progress ring around the held finger.
 	if _breaking and _look_index >= 0:
-		draw_arc(_look_last, 46.0, 0, TAU, 40, Color(0, 0, 0, 0.35), 8.0)
-		draw_arc(_look_last, 46.0, -PI * 0.5, -PI * 0.5 + TAU * _break_progress, 40, Color(1, 0.55, 0.35, 0.95), 8.0)
+		# Thumb-sized ring: sits around the fingertip rather than under it.
+		draw_arc(_look_last, 96.0, 0, TAU, 64, Color(0, 0, 0, 0.35), 14.0)
+		draw_arc(_look_last, 96.0, -PI * 0.5, -PI * 0.5 + TAU * clampf(_break_progress, 0.0, 1.0), 64, Color(1, 0.6, 0.35, 0.95), 12.0)
 	# Hotbar
 	for i in _hotbar_rects.size():
 		var rc := _hotbar_rects[i]

@@ -61,6 +61,13 @@ func _ready() -> void:
 		await process_frame
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png("res://build/shot_build.png")
+	# Cracks overlay on the brick roof slab at 70%.
+	b.show_cracks(AABB(q + Vector3(1, 10, 1), Vector3(4, 2, 4)), 0.7)
+	for i in 3:
+		await process_frame
+	await RenderingServer.frame_post_draw
+	root.get_texture().get_image().save_png("res://build/shot_cracks.png")
+	b.hide_cracks()
 	# --- edit latency: frames until the edited chunk's new mesh is on screen
 	var w: VoxelWorld = main.world
 	var lat := []

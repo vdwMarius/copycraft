@@ -161,7 +161,7 @@ func open_settings() -> void:
 	_choice(b, "Texture resolution", "texture_resolution", [["16", 16], ["32", 32], ["64", 64], ["128", 128], ["256", 256], ["512", 512], ["Pack", 0]])
 	_choice(b, "3D surface depth", "parallax", [["Off", 0], ["Low", 1], ["Medium", 2], ["High", 3]])
 	_choice(b, "Shadows", "shadows", [["Off", 0], ["Low", 1], ["High", 2]])
-	_choice(b, "Anti-aliasing", "msaa", [["Off", 0], ["2×", 1], ["4×", 2]])
+	_choice(b, "Anti-aliasing", "msaa", [["Off", 0], ["2×", 1]])
 	_choice(b, "Glow", "glow", [["Off", false], ["On", true]])
 	_choice(b, "Look sensitivity", "look_sensitivity", [["0.5", 0.5], ["0.75", 0.75], ["1", 1.0], ["1.5", 1.5], ["2", 2.0]])
 	_choice(b, "Performance stats", "show_stats", [["Hide", false], ["Show", true]])

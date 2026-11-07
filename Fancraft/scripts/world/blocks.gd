@@ -18,7 +18,9 @@ const DEFS := {
 	5: ["sand", "Sand", "sand", "sand", "sand", Render.OPAQUE, true, 0.0],
 	6: ["log", "Oak Log", "log_top", "log_side", "log_top", Render.OPAQUE, true, 0.0],
 	7: ["planks", "Oak Planks", "planks", "planks", "planks", Render.OPAQUE, true, 0.0],
-	8: ["leaves", "Leaves", "leaves", "leaves", "leaves", Render.CUTOUT, true, 0.0],
+	# Leaves are solid, painted clumps (like the reference art). Cut-out holes need
+	# fragment discard, which is expensive on mobile GPUs.
+	8: ["leaves", "Leaves", "leaves", "leaves", "leaves", Render.OPAQUE, true, 0.0],
 	9: ["glass", "Glass", "glass", "glass", "glass", Render.TRANSLUCENT, true, 0.0],
 	10: ["water", "Water", "water", "water", "water", Render.TRANSLUCENT, false, 0.0],
 	11: ["bricks", "Bricks", "bricks", "bricks", "bricks", Render.OPAQUE, true, 0.0],

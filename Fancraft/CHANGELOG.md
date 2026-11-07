@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.0: break feedback, pacing, and the 4× MSAA cliff
+
+Phone report on 0.5.0: about 60 fps on Ultra, 20–30 fps with 4× MSAA; movement too fast;
+the break ring is too small.
+- **Breaking:**
+  - cracks overlay on the piece being broken, spreading in 10 stages like Minecraft;
+  - break ring is now thumb-sized (radius 96 px) and thicker.
+- **Movement:** Minecraft speeds of 4.3 m/s walking, 5.6 m/s sprinting and 10.9 m/s flying.
+- **4× MSAA removed.** It cost 2–3× the frame time at phone resolution. Saved settings
+  drop to 2× once.
+- **Solid leaves.** Leaves render as solid painted clumps, matching the reference trees,
+  instead of cut-out transparency. Texture gaps become dark shaded pockets. Cut-out
+  transparency forces late depth testing on mobile GPUs, and solid leaves also hide each
+  other's inner faces. Draw calls in the test scene fell from 193 to 126.
+
 ## 0.5.0: fewer draw calls, Minecraft-style breaking
 
 Phone report on 0.4.0: Max Fidelity ran at about 20 fps even with 3D resolution at 50%, so it
