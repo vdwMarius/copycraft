@@ -10,7 +10,9 @@ signal open_bag
 
 const LOOK_TAP_TIME := 0.3      # a touch released sooner than this (without dragging) is a tap
 const LOOK_TAP_SLOP := 16.0     # moving further than this turns the touch into camera look
-const HOLD_START := 0.2         # a still finger held this long starts harvesting / demolishing
+const HOLD_START := 0.32        # a still finger held this long starts harvesting / demolishing
+const HOLD_CANCEL := 48.0       # swiping this far before the first action completes = it was a look
+const HOLD_LOOK_FACTOR := 0.22  # during a real hold, swipes nudge the camera a little
 const BREAK_COOLDOWN := 0.25    # pause after each finished hold action (not for digging)
 const TOOL_COLORS := [Color(0.55, 0.38, 0.22), Color(0.72, 0.3, 0.22), Color(0.3, 0.5, 0.75)]
 
@@ -38,7 +40,8 @@ var _safe := Rect2()
 var _hotbar_rects: Array[Rect2] = []
 var _break_progress := 0.0     # 0..1 ring around the held finger
 var _broke_this_touch := false
-var _breaking := false          # this touch has turned into a hold action (view no longer turns)
+var _breaking := false          # this touch has turned into a hold action (view barely turns)
+var _hold_moved := 0.0          # finger travel since the hold action started
 var _break_key: Variant = null  # target being worked on; progress resets if it changes
 var _cooldown := 0.0
 var _toast := ""
@@ -161,6 +164,7 @@ func _update_hold(delta: float) -> void:
 			return   # still a tap, or it became a camera drag
 		_breaking = true
 		_break_progress = 0.0
+		_hold_moved = 0.0
 	tools.aim_screen = _look_last
 	if _cooldown > 0.0:
 		_cooldown -= delta
@@ -252,7 +256,8 @@ func _touch(e: InputEventScreenTouch) -> void:
 			_select_slot(slot)
 			get_viewport().set_input_as_handled()
 			return
-		if p.x < _safe.position.x + _safe.size.x * 0.42 and _joy_index < 0:
+		# Joystick only from the lower-left corner, so taps left of centre stay taps/looks.
+		if p.x < _safe.position.x + _safe.size.x * 0.3 and p.y > _safe.position.y + _safe.size.y * 0.42 and _joy_index < 0:
 			_joy_index = e.index
 			_joy_origin = p
 			_joy_pos = p
@@ -290,9 +295,20 @@ func _drag(e: InputEventScreenDrag) -> void:
 		var d := e.position - _look_last
 		_look_last = e.position
 		_look_moved += d.length()
-		# Once a touch is breaking, swiping moves the break to the block under the
-		# finger (progress restarts) instead of turning the camera.
-		if not _breaking:
+		if _breaking:
+			_hold_moved += d.length()
+			# A rested finger that then swipes away before anything was dug / chopped
+			# was really a look: drop the hold and turn the camera normally.
+			if not _broke_this_touch and _hold_moved > HOLD_CANCEL:
+				_end_hold()
+				_breaking = false
+				_look_moved = LOOK_TAP_SLOP   # never becomes a tap or a hold again
+				player.look(d * 1.2)
+				return
+			# During a real hold the action follows the finger and the camera drifts
+			# gently the same way.
+			player.look(d * HOLD_LOOK_FACTOR)
+		else:
 			player.look(d * 1.2)
 
 

@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.9.1: chopping, controls and terrain fixes (phone feedback)
+
+- **Trees gave dirt, bushes couldn't be harvested.** Root cause: in this Voxel Tools
+  version, the instancer's collision bodies were all stacked at one point instead of on
+  the plants, so holds went straight through to the ground. Trees, bushes and rocks now
+  come from a new deterministic flora system:
+  - jittered placement filtered by height, slope and forest noise;
+  - one multimesh per 64 m region and model, with detail switching at 45 m and 110 m;
+  - real collision within 48 m;
+  - every plant has a stable id (ready for saves).
+  Aiming anywhere at a canopy, bush or rock targets that plant. The instancer still
+  scatters grass and flowers.
+- **Swiping to look sometimes dug:**
+  - a still finger must now rest 0.32 s (was 0.2 s) before a hold starts;
+  - swiping more than 48 px before the first dig or chop completes turns it back into a
+    normal look.
+- **During a real hold,** swiping moves the action to what's under your finger and nudges
+  the camera slightly (22%) that way.
+- **Joystick** now only activates in the lower-left corner (left 30%, lower 58% of the
+  screen), so taps left of centre stay taps and looks.
+- **Terrain** is smoother and more natural:
+  - broad lowlands with lakes and beaches;
+  - domain-warped rolling hills;
+  - squared ridge noise for mountain ranges, only in some regions.
+  A new test checks the native generator matches GDScript (0.015 m) and that the terrain
+  isn't jagged.
+- Digging under a plant removes it (no floating trees). Flora draw distance follows the
+  view-distance setting.
+- **Input test** now aims at a real tree canopy through the screen and checks that it
+  chops for wood, plus bush and rock harvesting and both swipe behaviours.
+
 ## 0.9.0: S3, resources and inventory
 
 Phone report on 0.8.0: stable 120 fps on Max Fidelity, occasional dips to 110.

@@ -21,7 +21,7 @@ var current := HAMMER
 var player: Player
 var terrain: SmoothTerrain
 var building: BuildSystem
-var vegetation: Node3D           # VoxelInstancer
+var flora: Flora                 # trees, bushes, rocks
 var inventory: Inventory
 var _rng := RandomNumberGenerator.new()
 var edit_count := 0              # successful actions (tests / stats)
@@ -40,11 +40,19 @@ func _process(_delta: float) -> void:
 
 # ------------------------------------------------------------------ targeting
 
-func _ray(origin: Vector3, dir: Vector3) -> Dictionary:
+func _ray(origin: Vector3, dir: Vector3, plants := true) -> Dictionary:
 	var space := get_world_3d().direct_space_state
 	var q := PhysicsRayQueryParameters3D.create(origin, origin + dir * REACH)
 	q.exclude = [player.get_rid()]
 	var r := space.intersect_ray(q)
+	# Plants only collide at the trunk / core, but players aim at canopies and bushes:
+	# if the aim passes through a plant's visual volume before the hit, target the plant.
+	if plants and flora:
+		var pick := flora.pick(origin, dir, REACH if r.is_empty() else origin.distance_to(r.position) + 0.3)
+		if not pick.is_empty():
+			pick.kind = "plant"
+			pick.normal = -dir
+			return pick
 	if r.is_empty():
 		return {}
 	var kind := "other"
@@ -52,8 +60,13 @@ func _ray(origin: Vector3, dir: Vector3) -> Dictionary:
 		kind = "part"
 	elif terrain.owns_collider(r.collider):
 		kind = "terrain"
-	elif _owned_by(r.collider, vegetation):
-		kind = "plant"
+	elif flora and (r.collider as Node).has_meta("flora_region"):
+		var hit := flora.from_collider(r.collider, r.shape)
+		if not hit.is_empty():
+			hit.kind = "plant"
+			hit.position = r.position
+			hit.normal = r.normal
+			return hit
 	return {"position": r.position, "normal": r.normal, "collider": r.collider, "shape": r.shape, "kind": kind}
 
 
@@ -64,16 +77,7 @@ func _ray_screen(screen_pos: Vector2) -> Dictionary:
 
 func _ray_crosshair() -> Dictionary:
 	var e := player.eye_ray()
-	return _ray(e[0], e[1])
-
-
-static func _owned_by(node: Object, owner: Node) -> bool:
-	var n := node as Node
-	while n and owner:
-		if n == owner:
-			return true
-		n = n.get_parent()
-	return false
+	return _ray(e[0], e[1], false)   # building aims at real surfaces only
 
 
 # ------------------------------------------------------------------ actions
@@ -89,7 +93,7 @@ func hold_info(screen_pos: Vector2) -> Dictionary:
 		"part":
 			return {"kind": "demolish", "time": 0.8 if current == HAMMER else 2.0, "key": t.collider.get_instance_id()}
 		"plant":
-			return {"kind": "chop", "time": 1.1 if current == AXE else 2.8, "key": t.collider.get_instance_id()}
+			return {"kind": "chop", "time": 1.1 if current == AXE else 2.8, "key": t.plant.id}
 	return {}
 
 
@@ -107,14 +111,15 @@ func complete_target(t: Dictionary) -> bool:
 			var at: Vector3 = t.position - t.normal * 0.35
 			var mat := dug_material(at)
 			terrain.dig(at, DIG_RADIUS)
+			if flora:
+				flora.remove_in_sphere(at, DIG_RADIUS + 0.6)   # no floating trees
 			_give(mat, 2 if mat != "stone" else 1)
 		"part":
 			building.demolish(t.collider)
 		"plant":
-			var kind := plant_kind(t.collider, t.get("shape", 0))
-			var p: Vector3 = t.position
-			var ground := terrain.height_at(p.x, p.z)
-			vegetation.remove_instances_in_sphere(Vector3(p.x, minf(ground, p.y), p.z), 1.6 if kind != "bush" else 1.0)
+			var kind := flora.remove(t.region, t.index)
+			if kind == "":
+				return false
 			var got := harvest_yield(kind)
 			for id in got:
 				_give(id, got[id])
@@ -165,21 +170,6 @@ func dug_material(at: Vector3) -> String:
 	return "dirt"
 
 
-## Which kind of plant a collider belongs to, from its collision shape:
-## capsule / cylinder = tree trunk, convex hull = rock, sphere = bush.
-func plant_kind(collider: Object, shape_index: int) -> String:
-	var body := collider as CollisionObject3D
-	if body == null:
-		return "tree"
-	var owner_id := body.shape_find_owner(shape_index)
-	var shape := body.shape_owner_get_shape(owner_id, 0) if owner_id >= 0 else null
-	if shape is ConvexPolygonShape3D or shape is BoxShape3D:
-		return "rock"
-	if shape is SphereShape3D:
-		return "bush"
-	return "tree"
-
-
 func harvest_yield(kind: String) -> Dictionary:
 	match kind:
 		"rock":
@@ -189,7 +179,7 @@ func harvest_yield(kind: String) -> Dictionary:
 			return y
 		"bush":
 			return {"fiber": _rng.randi_range(2, 3), "berries": _rng.randi_range(1, 2)}
-	return {"wood": _rng.randi_range(4, 6)}
+	return {"wood": _rng.randi_range(4, 6)}   # broadleaf and pine trees
 
 
 func _give(id: String, n: int) -> void:

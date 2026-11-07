@@ -14,34 +14,50 @@ const DIRT := 1
 const STONE := 2
 
 var seed_value := 1337
-var continent := FastNoiseLite.new()
-var hills := FastNoiseLite.new()
-var ridges := FastNoiseLite.new()
+var continent := FastNoiseLite.new()   # lowlands vs highlands, very broad
+var hills := FastNoiseLite.new()       # rolling hills, domain-warped for natural shapes
+var ridges := FastNoiseLite.new()      # mountain ridges
+var ranges := FastNoiseLite.new()      # where mountain ranges are allowed
 
-# Note: the graph expression parser reads `name * (` as a function call, so parenthesised
-# terms come first.
-const HEIGHT_EXPR := "34 + cont * 14 + (6 + max(cont, 0) * 10) * hill + max(ridge - 0.25, 0) * 42 * clamp(cont + 0.6, 0, 1)"
+# Note: the graph expression parser reads `name * (` as a function call, so
+# parenthesised terms come first.
+#   base:      broad lowlands near the sea, gentle highlands inland
+#   hills:     amplitude grows inland (flat beaches, rolling interior)
+#   mountains: ridged noise squared for sharp crests and wide smooth foothills,
+#              only inside "range" regions so most land stays walkable
+const HEIGHT_EXPR := "36 + cont * 16 + (2.5 + clamp(cont * 2.2 + 0.9, 0, 1) * 9) * hill + max(ridge, 0) * max(ridge, 0) * 75 * clamp(rng * 2.5 + 0.05, 0, 1)"
 
 
 func _init(s := 1337) -> void:
 	seed_value = s
 	continent.seed = s
-	continent.frequency = 0.0035
-	continent.fractal_octaves = 3
+	continent.frequency = 0.0016
+	continent.fractal_octaves = 4
+	continent.fractal_gain = 0.45
 	hills.seed = s + 1
-	hills.frequency = 0.012
-	hills.fractal_octaves = 4
+	hills.frequency = 0.0065
+	hills.fractal_octaves = 3
+	hills.fractal_gain = 0.42           # fewer small bumps: smoother slopes
+	hills.domain_warp_enabled = true
+	hills.domain_warp_amplitude = 28.0
+	hills.domain_warp_frequency = 0.004
 	ridges.seed = s + 3
-	ridges.frequency = 0.006
+	ridges.frequency = 0.0032
 	ridges.fractal_type = FastNoiseLite.FRACTAL_RIDGED
-	ridges.fractal_octaves = 3
+	ridges.fractal_octaves = 4
+	ridges.fractal_gain = 0.45
+	ranges.seed = s + 5
+	ranges.frequency = 0.0011
+	ranges.fractal_octaves = 2
 
 
 func height_at(x: float, z: float) -> float:
 	var c := continent.get_noise_2d(x, z)
 	var h := hills.get_noise_2d(x, z)
 	var r := ridges.get_noise_2d(x, z)
-	return 34.0 + c * 14.0 + h * (6.0 + maxf(c, 0.0) * 10.0) + maxf(r - 0.25, 0.0) * 42.0 * clampf(c + 0.6, 0.0, 1.0)
+	var m := ranges.get_noise_2d(x, z)
+	var crest := maxf(r, 0.0)
+	return 36.0 + c * 16.0 + (2.5 + clampf(c * 2.2 + 0.9, 0.0, 1.0) * 9.0) * h + crest * crest * 75.0 * clampf(m * 2.5 + 0.05, 0.0, 1.0)
 
 
 ## Native generator graph mirroring height_at(): SDF = y - height, plus a texture index.
@@ -53,7 +69,7 @@ func build_generator() -> Resource:
 	var ny: int = g.create_node(T.call("NODE_INPUT_Y"), Vector2(0, 100))
 	var nz: int = g.create_node(T.call("NODE_INPUT_Z"), Vector2(0, 200))
 	var noises := []
-	for n in [continent, hills, ridges]:
+	for n in [continent, hills, ridges, ranges]:
 		var id: int = g.create_node(T.call("NODE_NOISE_2D"), Vector2(200, 0))
 		g.set_node_param(id, 0, n)
 		g.add_connection(nx, 0, id, 0)
@@ -61,8 +77,8 @@ func build_generator() -> Resource:
 		noises.append(id)
 	var height: int = g.create_node(T.call("NODE_EXPRESSION"), Vector2(400, 0))
 	g.set_node_param(height, 0, HEIGHT_EXPR)
-	g.set_expression_node_inputs(height, PackedStringArray(["cont", "hill", "ridge"]))
-	for i in 3:
+	g.set_expression_node_inputs(height, PackedStringArray(["cont", "hill", "ridge", "rng"]))
+	for i in 4:
 		g.add_connection(noises[i], 0, height, i)
 	var sdf: int = g.create_node(T.call("NODE_EXPRESSION"), Vector2(600, 0))
 	g.set_node_param(sdf, 0, "posy - height")

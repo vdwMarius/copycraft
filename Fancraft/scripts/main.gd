@@ -9,6 +9,7 @@ var sky_mat: ShaderMaterial
 var sun: DirectionalLight3D
 var terrain: SmoothTerrain
 var vegetation: Node3D
+var flora: Flora
 var building: BuildSystem
 var tools: Tools
 var inventory: Inventory
@@ -42,6 +43,10 @@ func _ready() -> void:
 	Textures.textures_changed.connect(PropMeshes.refresh_textures)
 	Textures.textures_changed.connect(PartMeshes.refresh_textures)
 	vegetation = Vegetation.create(terrain.terrain)
+	flora = Flora.new()
+	flora.name = "Flora"
+	flora.setup(terrain.shape, player)
+	add_child(flora)
 	player.position = _find_spawn(terrain.shape)
 	player.terrain = terrain
 	inventory = Inventory.new()
@@ -57,7 +62,7 @@ func _ready() -> void:
 	tools.player = player
 	tools.terrain = terrain
 	tools.building = building
-	tools.vegetation = vegetation
+	tools.flora = flora
 	tools.inventory = inventory
 	add_child(tools)
 	var layer := CanvasLayer.new()

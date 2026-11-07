@@ -1,8 +1,7 @@
 class_name Vegetation
 extends RefCounted
-## Trees, bushes, rocks, grass and flowers, scattered natively on the smooth terrain by
-## Voxel Tools' VoxelInstancer (multimesh, LOD, collision near the player, removed
-## automatically when the ground under them is dug away).
+## Grass and flower ground cover, scattered natively by Voxel Tools' VoxelInstancer
+## (multimesh per terrain block, only near the player, removed when the ground is dug).
 
 const KIND_TREE := "tree"
 const KIND_ROCK := "rock"
@@ -22,38 +21,9 @@ static func create(voxel_terrain: Node3D) -> Node3D:
 	var meadow := FastNoiseLite.new()
 	meadow.seed = 777
 	meadow.frequency = 0.03
+	# Trees, bushes and rocks are placed by Flora (exact positions for harvesting and
+	# collision); the instancer only scatters ground cover.
 	var id := 0
-	var water := TerrainShape.WATER_LEVEL
-	# Broadleaf forests on gentle grassy slopes.
-	for v in 3:
-		_add(lib, id, KIND_TREE, func(d: int) -> ArrayMesh: return PropMeshes.tree_broadleaf(v, d), {
-			"lod_index": 2, "density": 0.0032, "max_slope": 28.0, "min_h": water + 2.5, "max_h": 60.0,
-			"scale": Vector2(0.8, 1.25), "noise": forest, "noise_threshold": 0.05, "topsoil": true,
-			"collision": PropMeshes.tree_collision("broadleaf"), "offset": -0.15,
-		}, [PropMeshes.bark_material(), PropMeshes.foliage_material()])
-		id += 1
-	# Pines higher up.
-	for v in 2:
-		_add(lib, id, KIND_TREE, func(d: int) -> ArrayMesh: return PropMeshes.tree_pine(v, d), {
-			"lod_index": 2, "density": 0.003, "max_slope": 34.0, "min_h": 46.0, "max_h": 80.0,
-			"scale": Vector2(0.85, 1.3), "topsoil": false,
-			"collision": PropMeshes.tree_collision("pine"), "offset": -0.15,
-		}, [PropMeshes.bark_material(), PropMeshes.foliage_material()])
-		id += 1
-	for v in 2:
-		_add(lib, id, KIND_BUSH, func(d: int) -> ArrayMesh: return PropMeshes.bush(v, d), {
-			"lod_index": 1, "density": 0.007, "max_slope": 30.0, "min_h": water + 2.0, "max_h": 64.0,
-			"scale": Vector2(0.7, 1.3), "noise": forest, "noise_threshold": -0.2, "topsoil": true, "offset": -0.1,
-			"collision": [_bush_shape()],
-		}, [PropMeshes.foliage_material()])
-		id += 1
-	for v in 3:
-		_add(lib, id, KIND_ROCK, func(d: int) -> ArrayMesh: return PropMeshes.rock(v, d), {
-			"lod_index": 1, "density": 0.0018, "max_slope": 55.0, "min_h": water - 4.0, "max_h": 200.0,
-			"scale": Vector2(0.6, 1.6), "topsoil": false, "align": 0.7,
-			"collision": PropMeshes.rock_collision(v), "offset": -0.25,
-		}, [PropMeshes.rock_material()])
-		id += 1
 	# Ground cover: only close by (LOD0), dense, no collision, no shadows.
 	for v in 2:
 		_add_cover(lib, id, PropMeshes.grass_tuft(v), 0.32, meadow, -1.0)
