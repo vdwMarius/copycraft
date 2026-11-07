@@ -22,3 +22,11 @@ Startup terrain generation is synchronous and finite by design in Job 01. Stream
 ## Useful commands
 
 Run from repository root using `tools/godot.sh` so retained templates/editor settings are found. Use `--headless --script res://tests/smoke.gd` for the integrated test. On a graphical display, `--script res://tests/capture.gd` captures `build/first-light.png` and exits. Export with `--headless --export-debug Android build/copycraft-debug.apk`.
+
+## Phone feedback and controls update (0.1.1)
+
+The creative director reports that the original Job 01 APK runs smoothly at 120 fps without stutter on their S26 Ultra. This is user-reported device evidence; no benchmark trace, duration, resolution, or thermal measurements were supplied. Other device checks and formal sustained-performance testing remain outstanding.
+
+Version 0.1.1 adds automatic jumping when moving into reachable one-block ledges. Capsule sweeps check obstacle height, full jump headroom, and a landing surface; idle movement, two-block walls and low ceilings do not trigger auto-jump. Manual jumping remains available. The joystick starts only within its visible disc, retaining captured drags outside it until release. The existing right-side look capture policy is unchanged; block interaction gestures remain future work.
+
+Automated controls regressions cover climbing one-block obstacles, refusing taller walls/low ceilings, idle behavior, and visible-disc joystick capture, outside taps/drags, independent contacts and scaled layouts. Physical-phone validation of the new controls is still required.

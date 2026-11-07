@@ -5,6 +5,7 @@ const INK := Color(0.91, 0.96, 0.94)
 const MUTED := Color(0.61, 0.73, 0.73)
 const MINT := Color(0.57, 0.94, 0.73)
 const PANEL := Color(0.035, 0.075, 0.085, 0.84)
+const JOYSTICK_RADIUS := 75.0
 const BLOCK_COLORS := [Color("75b975"), Color("ba9570"), Color("82989a"), Color("dabd80"), Color("8bbcc1")]
 
 var player: CharacterBody3D
@@ -108,7 +109,7 @@ func _input(event: InputEvent) -> void:
 		if event.position.distance_to(_jump_center) <= 65.0 * _scale and _jump_id == -1:
 			_jump_id = event.index
 			player.request_jump()
-		elif event.position.x < size.x * 0.42 and event.position.y > size.y * 0.38 and _joystick_id == -1:
+		elif event.position.distance_to(_joy_center) <= JOYSTICK_RADIUS * _scale and _joystick_id == -1:
 			_joystick_id = event.index
 			_set_joystick(event.position)
 		elif event.position.x > size.x * 0.42 and _look_id == -1:
@@ -209,7 +210,7 @@ func _draw() -> void:
 		draw_rect(Rect2(slot + Vector2(17, 10) * s, Vector2(25, 7) * s), BLOCK_COLORS[i].lightened(0.23))
 		_text(slot + Vector2(5, 43) * s, str(i + 1), 10, MUTED)
 	_text(Vector2(_safe_rect.get_center().x - 92 * s, _safe_rect.end.y - 101 * s), "TERRAIN PALETTE · PREVIEW", 10, MUTED)
-	draw_circle(_joy_center, 75 * s, Color(0.035, 0.075, 0.085, 0.3))
+	draw_circle(_joy_center, JOYSTICK_RADIUS * s, Color(0.035, 0.075, 0.085, 0.3))
 	draw_arc(_joy_center, 74 * s, 0, TAU, 64, Color(0.84, 0.96, 0.9, 0.3), 1.5 * s, true)
 	draw_circle(_joy_center + _joystick_vector * 47 * s, 29 * s, Color(0.74, 0.91, 0.84, 0.28))
 	draw_arc(_joy_center + _joystick_vector * 47 * s, 29 * s, 0, TAU, 40, Color(0.84, 0.96, 0.9, 0.45), s, true)

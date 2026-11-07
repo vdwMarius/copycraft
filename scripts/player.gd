@@ -1,6 +1,10 @@
 extends CharacterBody3D
 ## First-person controller. HUD owns touch IDs and supplies movement/look requests.
 
+const AUTO_JUMP_HEIGHT := 1.05
+const JUMP_SPEED := 8.2
+const GRAVITY := 24.0
+
 var camera: Camera3D
 var move_input := Vector2.ZERO
 var walk_speed := 6.0
@@ -101,12 +105,43 @@ func _physics_process(delta: float) -> void:
 	velocity.x = move_toward(velocity.x, world_direction.x * speed, 32.0 * delta)
 	velocity.z = move_toward(velocity.z, world_direction.z * speed, 32.0 * delta)
 	if not is_on_floor():
-		velocity.y -= 24.0 * delta
-	if _jump_buffer > 0.0 and _floor_grace > 0.0:
-		velocity.y = 8.2
+		velocity.y -= GRAVITY * delta
+	var auto_jump := is_on_floor() and _can_auto_jump(world_direction)
+	if (_jump_buffer > 0.0 and _floor_grace > 0.0) or auto_jump:
+		velocity.y = JUMP_SPEED
 		_jump_buffer = 0.0
 		_floor_grace = 0.0
 	move_and_slide()
 	if position.y < -70.0:
 		position = Vector3(0, 12, 8)
 		velocity = Vector3.ZERO
+
+
+func _can_auto_jump(direction: Vector3) -> bool:
+	# Sweep the player's capsule, rather than a ray that could miss shoulders.
+	if not _focused or direction.length_squared() < 0.04:
+		return false
+	var forward := direction.normalized() * 0.6
+	var obstacle := KinematicCollision3D.new()
+	if not test_move(global_transform, forward, obstacle):
+		return false
+	if obstacle.get_normal().dot(direction.normalized()) > -0.5:
+		return false
+	# Refuse tall walls and low ceilings, including the full jump's headroom.
+	var clearance := Vector3.UP * (JUMP_SPEED * JUMP_SPEED / (2.0 * GRAVITY) + 0.03)
+	if test_move(global_transform, clearance):
+		return false
+	var apex := global_transform
+	apex.origin += clearance
+	if test_move(apex, forward):
+		return false
+	var raised := global_transform
+	raised.origin.y += AUTO_JUMP_HEIGHT
+	if test_move(raised, forward):
+		return false
+	raised.origin += forward
+	var landing := KinematicCollision3D.new()
+	if not test_move(raised, Vector3.DOWN * (AUTO_JUMP_HEIGHT + 0.05), landing):
+		return false
+	var rise := AUTO_JUMP_HEIGHT + landing.get_travel().y
+	return rise > 0.15 and rise <= AUTO_JUMP_HEIGHT and landing.get_normal().y > 0.7
