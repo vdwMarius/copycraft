@@ -34,6 +34,21 @@ this repository.
   bases anywhere. It later moves to the module's native blocky mesher if it shows up in profiles.
 - **Size:** adds about 7 MB uncompressed (ARM64 library) to the APK.
 
+## Style shift (0.8.0, user decision)
+
+Fancraft is now a regular stylised 3D survival-crafting game. The Minecraft and cube
+aspects are gone:
+- **No cubes or blocks:** the voxel cube layer and quarter-block pieces are removed.
+- **Vegetation:** procedural stylised trees (broadleaf, pine), bushes, rocks, grass and
+  flowers, scattered natively by Voxel Tools' `VoxelInstancer` (multimesh, LOD, collision
+  near the player, auto-removed when the ground is dug).
+- **Building:** snap-together parts (Valheim-like) on a 2 m grid in wood or stone:
+  foundation, floor, wall, doorway, window wall, half wall, 45° roof, stairs, pillar, beam.
+  A hologram preview at the crosshair shows the snap; tap places it and holding a part
+  demolishes it.
+- **Tools:** Shovel (tap raises, hold digs), Axe (hold chops), Hammer (build and demolish).
+- The smooth diggable terrain and painted cel-shaded look stay.
+
 ## Gameplay pillars
 
 1. **Explore:** large seeded world with biomes (meadow, forest, highlands, beach,
@@ -51,7 +66,7 @@ this repository.
 | # | Milestone | Contents |
 |---|---|---|
 | S1 | Smooth world | Voxel Tools terrain with LOD, stylised triplanar shader, collision, player, touch dig (hold) and raise (tap with the terrain tool), 120 fps target on the S26 Ultra |
-| S2 | Build on terrain | Structure layer on smooth terrain, cracks fitted to the actual piece (done), tool and material hotbar |
+| S2 | Build on terrain | Snap-together building parts, tools (shovel, axe, hammer), stylised vegetation (0.8.0) |
 | S3 | Resources and inventory | Dig and break yields items by material and volume, pickups, inventory UI, stack limits |
 | S4 | Crafting | Recipes, crafting UI, workbench, tool tiers (dig speed and size) |
 | S5 | Survival loop | Health, hunger, stamina, day/night, death and respawn, food from plants and fishing |

@@ -1,0 +1,137 @@
+class_name Vegetation
+extends RefCounted
+## Trees, bushes, rocks, grass and flowers, scattered natively on the smooth terrain by
+## Voxel Tools' VoxelInstancer (multimesh, LOD, collision near the player, removed
+## automatically when the ground under them is dug away).
+
+const KIND_TREE := "tree"
+const KIND_ROCK := "rock"
+const KIND_BUSH := "bush"
+
+## item id -> kind, filled when the library is built (for harvesting yields later).
+static var item_kinds := {}
+
+
+static func create(voxel_terrain: Node3D) -> Node3D:
+	var instancer = ClassDB.instantiate("VoxelInstancer")
+	instancer.name = "Vegetation"
+	var lib = ClassDB.instantiate("VoxelInstanceLibrary")
+	var forest := FastNoiseLite.new()
+	forest.seed = 4242
+	forest.frequency = 0.008
+	var meadow := FastNoiseLite.new()
+	meadow.seed = 777
+	meadow.frequency = 0.03
+	var id := 0
+	var water := TerrainShape.WATER_LEVEL
+	# Broadleaf forests on gentle grassy slopes.
+	for v in 3:
+		_add(lib, id, KIND_TREE, func(d: int) -> ArrayMesh: return PropMeshes.tree_broadleaf(v, d), {
+			"lod_index": 2, "density": 0.0022, "max_slope": 28.0, "min_h": water + 2.5, "max_h": 60.0,
+			"scale": Vector2(0.8, 1.25), "noise": forest, "noise_threshold": 0.05, "topsoil": true,
+			"collision": PropMeshes.tree_collision("broadleaf"), "offset": -0.15,
+		}, [PropMeshes.bark_material(), PropMeshes.foliage_material()])
+		id += 1
+	# Pines higher up.
+	for v in 2:
+		_add(lib, id, KIND_TREE, func(d: int) -> ArrayMesh: return PropMeshes.tree_pine(v, d), {
+			"lod_index": 2, "density": 0.003, "max_slope": 34.0, "min_h": 46.0, "max_h": 80.0,
+			"scale": Vector2(0.85, 1.3), "topsoil": false,
+			"collision": PropMeshes.tree_collision("pine"), "offset": -0.15,
+		}, [PropMeshes.bark_material(), PropMeshes.foliage_material()])
+		id += 1
+	for v in 2:
+		_add(lib, id, KIND_BUSH, func(d: int) -> ArrayMesh: return PropMeshes.bush(v, d), {
+			"lod_index": 1, "density": 0.007, "max_slope": 30.0, "min_h": water + 2.0, "max_h": 64.0,
+			"scale": Vector2(0.7, 1.3), "noise": forest, "noise_threshold": -0.2, "topsoil": true, "offset": -0.1,
+		}, [PropMeshes.foliage_material()])
+		id += 1
+	for v in 3:
+		_add(lib, id, KIND_ROCK, func(d: int) -> ArrayMesh: return PropMeshes.rock(v, d), {
+			"lod_index": 1, "density": 0.0018, "max_slope": 55.0, "min_h": water - 4.0, "max_h": 200.0,
+			"scale": Vector2(0.6, 1.6), "topsoil": false, "align": 0.7,
+			"collision": PropMeshes.rock_collision(v), "offset": -0.25,
+		}, [PropMeshes.rock_material()])
+		id += 1
+	# Ground cover: only close by (LOD0), dense, no collision, no shadows.
+	for v in 2:
+		_add_cover(lib, id, PropMeshes.grass_tuft(v), 0.32, meadow, -1.0)
+		id += 1
+	_add_cover(lib, id, PropMeshes.flower_tuft(0), 0.04, meadow, 0.25)
+	id += 1
+	instancer.library = lib
+	voxel_terrain.add_child(instancer)
+	return instancer
+
+
+static func _gen(params: Dictionary) -> Resource:
+	var g = ClassDB.instantiate("VoxelInstanceGenerator")
+	g.emit_mode = ClassDB.class_get_integer_constant("VoxelInstanceGenerator", "EMIT_FROM_FACES")
+	g.density = params.density
+	g.max_slope_degrees = params.get("max_slope", 40.0)
+	g.max_slope_falloff_degrees = 6.0
+	g.min_height = params.get("min_h", -1000.0)
+	g.max_height = params.get("max_h", 1000.0)
+	g.min_height_falloff = 1.5
+	g.max_height_falloff = 4.0
+	var sc: Vector2 = params.get("scale", Vector2.ONE)
+	g.min_scale = sc.x
+	g.max_scale = sc.y
+	g.random_rotation = true
+	g.vertical_alignment = params.get("align", 1.0)
+	g.offset_along_normal = params.get("offset", 0.0)
+	if params.has("noise"):
+		g.noise = params.noise
+		g.noise_threshold = params.get("noise_threshold", 0.0)
+		g.noise_falloff = 0.15
+	if params.get("topsoil", false):
+		g.voxel_texture_filter_enabled = true
+		g.voxel_texture_filter_array = PackedInt32Array([TerrainShape.TOPSOIL])
+	return g
+
+
+static func _add(lib: Object, id: int, kind: String, make: Callable, params: Dictionary, mats: Array) -> void:
+	var item = ClassDB.instantiate("VoxelInstanceLibraryMultiMeshItem")
+	item.name = "%s_%d" % [kind, id]
+	item.lod_index = params.lod_index
+	item.generator = _gen(params)
+	var meshes: Array = [make.call(0), make.call(1), make.call(2)]
+	for m: ArrayMesh in meshes:
+		for si in m.get_surface_count():
+			if m.surface_get_material(si) == null and si < mats.size():
+				m.surface_set_material(si, mats[si])
+	item.mesh = meshes[0]
+	item.mesh_lod1 = meshes[1]
+	item.mesh_lod2 = meshes[2]
+	item.mesh_lod0_distance_ratio = 0.25
+	item.mesh_lod1_distance_ratio = 0.55
+	item.mesh_lod2_distance_ratio = 1.0
+	if params.has("collision"):
+		var shapes := []
+		for c in params.collision:
+			shapes.append(c.shape)
+			shapes.append(c.transform)
+		item.collision_shapes = shapes
+		item.collision_distance = 40.0
+	lib.add_item(id, item)
+	item_kinds[id] = kind
+
+
+static func _add_cover(lib: Object, id: int, mesh: ArrayMesh, density: float, noise: Noise, threshold: float) -> void:
+	var item = ClassDB.instantiate("VoxelInstanceLibraryMultiMeshItem")
+	item.name = "cover_%d" % id
+	item.lod_index = 0
+	var params := {"density": density, "max_slope": 36.0, "min_h": TerrainShape.WATER_LEVEL + 1.8, "max_h": 66.0,
+		"scale": Vector2(0.8, 1.3), "topsoil": true, "align": 0.6, "offset": -0.02}
+	if threshold > -1.0:
+		params.noise = noise
+		params.noise_threshold = threshold
+	item.generator = _gen(params)
+	for si in mesh.get_surface_count():
+		if mesh.surface_get_material(si) == null:
+			mesh.surface_set_material(si, PropMeshes.grass_material())
+	item.mesh = mesh
+	item.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	item.hide_beyond_max_lod = true
+	lib.add_item(id, item)
+	item_kinds[id] = "cover"

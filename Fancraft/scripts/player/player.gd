@@ -11,7 +11,6 @@ const FLY_SPEED := 10.9
 const STEP_HEIGHT := 0.55
 const EYE_HEIGHT := 1.6
 
-var world: VoxelWorld
 var terrain: SmoothTerrain
 var camera: Camera3D
 var move_input := Vector2.ZERO      # x = strafe, y = forward (-1..1)

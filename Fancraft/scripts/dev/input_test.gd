@@ -16,10 +16,9 @@ func _ready() -> void:
 	p._pitch = -0.7
 	await tree.physics_frame
 	await tree.process_frame
-	var w: VoxelWorld = main.world
+	var w: Tools = main.tools
 	var centre: Vector2 = get_viewport().get_visible_rect().size * 0.5
-	var b: Builder = main.builder
-	print("target at centre: ", b.has_target_at_screen(centre), " player at ", p.global_position)
+	print("target at centre: ", not main.tools.hold_info(centre).is_empty(), " player at ", p.global_position)
 	var failures := 0
 	var before := _edits(w)
 	_touch(3, centre, true)
@@ -36,9 +35,6 @@ func _ready() -> void:
 	# Let the broken blocks' meshes and collision land (a real re-tap takes >100 ms).
 	for i in 20:
 		await tree.physics_frame
-	var cam := p.camera
-	var tg := b.raycast(cam.project_ray_origin(centre), cam.project_ray_normal(centre))
-	print("tap target ", tg, " box ", b.current_box(tg) if not tg.is_empty() else null, " player ", p.global_position, " block ", b.block_id)
 	_touch(4, centre, true)
 	await tree.process_frame
 	_touch(4, centre, false)
@@ -80,10 +76,45 @@ func _ready() -> void:
 	if is_equal_approx(yaw, p.rotation.y):
 		failures += 1
 		printerr("FAIL: a normal drag no longer turns the view")
+	# --- building snapping
+	var bs: BuildSystem = main.building
+	var gx := floorf(p.global_position.x / 2.0) * 2.0 + 6.0
+	var gz := floorf(p.global_position.z / 2.0) * 2.0 + 6.0
+	var gh: float = main.terrain.height_at(gx + 1.0, gz + 1.0)
+	bs.part_id = "foundation"
+	var f := bs.plan({"position": Vector3(gx + 1.0, gh, gz + 1.0), "normal": Vector3.UP, "collider": null})
+	var f_ok: bool = f.get("ok", false) and is_equal_approx(f.transform.origin.y, snappedf(main.terrain.height_at(gx + 1.0, gz + 1.0), 0.25) + 0.3)
+	var fb := bs._spawn(f) if f_ok else null
+	_check(f_ok and fb != null, "foundation snaps to the grid at ground height", failures)
+	if not (f_ok and fb != null):
+		failures += 1
+	if fb:
+		var lvl: float = f.transform.origin.y
+		bs.part_id = "wall"
+		var wplan := bs.plan({"position": Vector3(gx + 1.0, lvl, gz + 0.15), "normal": Vector3.UP, "collider": fb})
+		var w_ok: bool = wplan.get("ok", false) and is_equal_approx(wplan.transform.origin.z, gz) and is_equal_approx(wplan.transform.origin.y, lvl)
+		if not w_ok:
+			failures += 1
+			printerr("FAIL: wall should stand on the foundation's south edge: ", wplan)
+		var wb := bs._spawn(wplan)
+		var again := bs.plan({"position": Vector3(gx + 1.0, lvl, gz + 0.15), "normal": Vector3.UP, "collider": fb})
+		if again.get("ok", true):
+			failures += 1
+			printerr("FAIL: a second wall in the same slot must be blocked")
+		bs.part_id = "floor"
+		var up := bs.plan({"position": Vector3(gx + 1.0, lvl + 2.4, gz), "normal": Vector3.UP, "collider": wb})
+		if not is_equal_approx(up.get("transform", Transform3D()).origin.y, lvl + Parts.WALL_H):
+			failures += 1
+			printerr("FAIL: a floor aimed at a wall top should sit one storey up: ", up)
+		print("building: foundation %.2f wall %s upper floor %.2f" % [lvl, wplan.slot, up.transform.origin.y])
 	# A quick tap must never break; a hold must never place.
 	print("hold edits=", after_hold - before, " tap edits=", after_tap - after_hold)
 	print("INPUT_TEST_RESULT failures=%d" % failures)
 	tree.quit(1 if failures else 0)
+
+
+func _check(cond: bool, what: String, _f: int) -> void:
+	print(("ok   " if cond else "FAIL: ") + what)
 
 
 func _touch(index: int, pos: Vector2, pressed: bool) -> void:
@@ -95,8 +126,5 @@ func _touch(index: int, pos: Vector2, pressed: bool) -> void:
 	Input.parse_input_event(e)
 
 
-func _edits(w: VoxelWorld) -> int:
-	var n: int = get_parent().terrain.edit_count
-	for k in w.versions:
-		n += w.versions[k]
-	return n
+func _edits(w: Tools) -> int:
+	return w.edit_count

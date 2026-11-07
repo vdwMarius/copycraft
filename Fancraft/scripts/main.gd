@@ -1,18 +1,19 @@
 extends Node3D
-## Scene bootstrap: lighting, environment, world, player, builder and UI.
+## Scene bootstrap: lighting, environment, terrain + vegetation, player, tools,
+## building and UI.
 
 const SEED := 20261107
 
 var env: Environment
 var sky_mat: ShaderMaterial
 var sun: DirectionalLight3D
-var world: VoxelWorld
 var terrain: SmoothTerrain
+var vegetation: Node3D
+var building: BuildSystem
+var tools: Tools
 var player: Player
-var builder: Builder
 var hud: Hud
 var menus: Menus
-var block_mats: BlockMaterials
 var _fps_hist := PackedFloat32Array()
 var _scale := 1.0
 var _auto_scale := false
@@ -27,8 +28,6 @@ var _loading: Label
 
 func _ready() -> void:
 	_build_environment()
-	block_mats = BlockMaterials.new()
-	block_mats.set_sun(sun.global_transform.basis.z)  # direction towards the sun
 	player = Player.new()
 	player.controls_enabled = false
 	add_child(player)
@@ -36,32 +35,35 @@ func _ready() -> void:
 	terrain.name = "Terrain"
 	add_child(terrain)
 	terrain.setup(SEED, player)
-	terrain.set_sun(sun.global_transform.basis.z)
+	terrain.set_sun(sun.global_transform.basis.z)  # direction towards the sun
+	PropMeshes.refresh_textures()
+	Textures.textures_changed.connect(PropMeshes.refresh_textures)
+	vegetation = Vegetation.create(terrain.terrain)
 	player.position = _find_spawn(terrain.shape)
-	# Structure layer: player-built pieces plus trees / boulders / crystals as pieces.
-	world = VoxelWorld.new()
-	world.name = "Structures"
-	world.setup(SEED, player, block_mats.materials, terrain.shape)
-	add_child(world)
-	player.world = world
 	player.terrain = terrain
-	builder = Builder.new()
-	builder.world = world
-	builder.terrain = terrain
-	builder.player = player
-	add_child(builder)
+	building = BuildSystem.new()
+	building.name = "Buildings"
+	building.terrain = terrain
+	building.player = player
+	add_child(building)
+	tools = Tools.new()
+	tools.player = player
+	tools.terrain = terrain
+	tools.building = building
+	tools.vegetation = vegetation
+	add_child(tools)
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	hud = Hud.new()
 	layer.add_child(hud)
-	hud.setup(player, builder, world)
+	hud.setup(player, tools, building)
 	menus = Menus.new()
 	menus.hud = hud
 	layer.add_child(menus)
 	hud.open_settings.connect(func(): _menu(true); menus.open_settings())
-	hud.open_blocks.connect(func(): _menu(true); menus.open_blocks())
+	hud.open_build.connect(func(): _menu(true); menus.open_build())
 	menus.closed.connect(func(): _menu(false))
-	menus.block_chosen.connect(hud.set_hotbar_block)
+	menus.part_chosen.connect(hud.set_part)
 	_loading = Label.new()
 	_loading.text = "Shaping the world…"
 	_loading.add_theme_font_size_override("font_size", 34)
@@ -73,8 +75,6 @@ func _ready() -> void:
 		_apply_setting(k)
 	if "--inputtest" in OS.get_cmdline_user_args():
 		add_child(load("res://scripts/dev/input_test.gd").new())
-	if "--stress" in OS.get_cmdline_user_args():
-		add_child(load("res://scripts/dev/stress.gd").new())
 	if "--capture" in OS.get_cmdline_user_args():
 		add_child(load("res://scripts/dev/capture.gd").new())
 	get_tree().root.focus_exited.connect(func(): player.move_input = Vector2.ZERO)
@@ -250,7 +250,6 @@ func _process(delta: float) -> void:
 	var sorted := _fps_hist.duplicate()
 	sorted.sort()
 	var p95 := sorted[int(sorted.size() * 0.95)] if sorted.size() > 10 else 0.0
-	var s := world.stats
 	var vp_rid := get_viewport().get_viewport_rid()
 	var draws := RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME)
 	var cpu_ms := RenderingServer.viewport_get_measured_render_time_cpu(vp_rid) + Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
@@ -258,6 +257,6 @@ func _process(delta: float) -> void:
 	hud.stats_text = "%d fps  p95 %.1f ms | cpu %.1f ms  gpu %.1f ms | draws %d | 3D %d%%%s | %s" % [
 		Engine.get_frames_per_second(), p95, cpu_ms, gpu_ms, draws, roundi(_scale * 100),
 		" auto" if _auto_scale else "", RenderingServer.get_current_rendering_method()]
-	hud.stats_text += "\nchunks %d  columns %d  tris %dk | gen %.1f ms  mesh %.1f ms  queue %d | %s %dpx" % [
-		s.chunks, s.meshes, s.triangles / 1000, s.gen_ms, s.mesh_ms, s.queue,
-		Settings.get_value("texture_pack"), Textures.resolution]
+	var prims := RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME)
+	hud.stats_text += "\ntris %dk | parts %d | %s %dpx" % [
+		prims / 1000, building.parts.size(), Settings.get_value("texture_pack"), Textures.resolution]

@@ -3,7 +3,7 @@ extends Control
 ## Settings and block-picker overlays (regular Controls, touch via mouse emulation).
 
 signal closed
-signal block_chosen(id: int)
+signal part_chosen(id: String)
 
 var hud: Hud
 var _panel: PanelContainer
@@ -159,7 +159,6 @@ func open_settings() -> void:
 	_choice(b, "View distance", "render_distance", [["3", 3], ["4", 4], ["6", 6], ["8", 8], ["10", 10], ["12", 12]])
 	_choice(b, "3D resolution", "render_scale", [["Auto", -1.0], ["50%", 0.5], ["67%", 0.67], ["75%", 0.75], ["90%", 0.9], ["100%", 1.0]])
 	_choice(b, "Texture resolution", "texture_resolution", [["16", 16], ["32", 32], ["64", 64], ["128", 128], ["256", 256], ["512", 512], ["Pack", 0]])
-	_choice(b, "3D surface depth", "parallax", [["Off", 0], ["Low", 1], ["Medium", 2], ["High", 3]])
 	_choice(b, "Shadows", "shadows", [["Off", 0], ["Low", 1], ["High", 2]])
 	_choice(b, "Anti-aliasing", "msaa", [["Off", 0], ["2×", 1]])
 	_choice(b, "Glow", "glow", [["Off", false], ["On", true]])
@@ -172,7 +171,7 @@ func open_settings() -> void:
 	_heading(b, "Controls")
 	var help := Label.new()
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	help.text = "Left side: move (push to the edge to sprint). Right side: drag to look. TAP to place the selected piece where you tap; HOLD to break (a ring fills, then keep holding to keep breaking). PIECE cycles shapes, ROT turns them, SNAP sets alignment (quarter / half / block), PICK copies the material you look at. 3D resolution Auto keeps your frame-rate target by scaling render resolution. Desktop: WASD, mouse, LMB break, RMB place, R rotate, T piece, G snap, F fly, Tab blocks, M menu."
+	help.text = "Left side: move (push to the edge to sprint). Right side: drag to look. Tools (bottom): SHOVEL - tap raises ground, hold digs. AXE - hold chops trees, bushes and rocks. HAMMER - aim the hologram with the crosshair, tap to build, hold a part to demolish; PART picks what to build, MAT wood/stone, ROT rotates. Desktop: WASD, mouse, LMB hold-action, RMB tap-action, 1-3 tools, Tab build menu, G material, R rotate, F fly, M menu."
 	b.add_child(help)
 	visible = true
 
@@ -226,25 +225,25 @@ func _sync_rows() -> void:
 			btn.set_pressed_no_signal(same)
 
 
-# ------------------------------------------------------------------ block picker
+# ------------------------------------------------------------------ build menu
 
-func open_blocks() -> void:
+func open_build() -> void:
 	var b := _clear()
-	_heading(b, "Choose a material")
+	_heading(b, "Build")
 	var grid := GridContainer.new()
-	grid.columns = 6
+	grid.columns = 5
 	grid.add_theme_constant_override("h_separation", 10)
 	grid.add_theme_constant_override("v_separation", 10)
-	for id in [Builder.TERRAIN_TOOL] + Array(Blocks.PALETTE):
+	for id in Parts.ORDER:
 		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(150, 120)
-		btn.text = "Terrain tool" if id == Builder.TERRAIN_TOOL else Blocks.names[id]
-		btn.icon = hud.block_icon(id) if hud else null
-		btn.expand_icon = false
-		btn.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-		btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		btn.add_theme_font_size_override("font_size", 18)
-		btn.pressed.connect(func(): block_chosen.emit(id); close_menu())
+		btn.custom_minimum_size = Vector2(190, 96)
+		btn.text = Parts.CATALOG[id].name
+		btn.add_theme_font_size_override("font_size", 20)
+		btn.pressed.connect(func(): part_chosen.emit(id); close_menu())
 		grid.add_child(btn)
 	b.add_child(grid)
+	var note := Label.new()
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.text = "Aim with the crosshair: the hologram shows where the part snaps (green = OK, red = blocked). Tap anywhere to place. Walls snap to the nearest edge of a foundation or floor; aim at the top of walls for upper floors and roofs. MAT switches wood / stone, ROT turns roofs and stairs. Hold on a part to demolish it."
+	b.add_child(note)
 	visible = true

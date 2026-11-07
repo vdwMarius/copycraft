@@ -5,7 +5,7 @@ import subprocess
 import sys
 
 root = Path(__file__).resolve().parents[1]
-suites = ['world_core', 'texture_library']
+suites = ['texture_library']
 for suite in suites:
     result = subprocess.run([str(root / 'tools/godot.sh'), '--headless', '--script', f'res://tests/{suite}.gd'],
                             cwd=root, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=300)
