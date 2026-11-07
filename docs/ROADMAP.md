@@ -6,7 +6,9 @@ The creative director approves major creative, platform, scope, and engine decis
 
 Confirmed: native Android first; classic voxel readability blended with vivid fantasy biomes, warm lighting, and atmospheric distance. Use original art, branding, and audio.
 
-Pending: engine approval and minimum target phone. Recommended engine: Godot 4 with a native voxel module. Assess module compatibility, licensing, Android support, and reproducible builds before adopting a dependency.
+Approved engine direction: Godot 4 with a native voxel module. Assess module compatibility, licensing, Android support, and reproducible builds before adopting a dependency.
+
+Primary performance validation device, as supplied by the creative director: Samsung Galaxy S26 Ultra, Snapdragon 8 Elite Gen 5 for Galaxy, 16 GB RAM, 1 TB storage. The earlier 12 GB reference describes another configuration; use the director's 16 GB model. This high-end target does not establish performance on midrange phones. Record OS, graphics backend, and actual rendering resolution during device testing.
 
 ## Increments
 
@@ -24,7 +26,7 @@ Crafting, combat, multiplayer, infinite content, and store publication require l
 
 ## Performance contract
 
-Aim for sustained 60 fps or better on a named Android device. At 60 fps the frame budget is 16.67 ms. Record device, OS, graphics backend, internal resolution, quality settings, memory, CPU/GPU timings where supported, frame-time percentiles, and long frames. Desktop and emulator results do not prove phone performance.
+Aim for sustained 60 fps or better on the director's Galaxy S26 Ultra. At 60 fps the frame budget is 16.67 ms. Record device, OS, graphics backend, internal resolution, quality settings, memory, CPU/GPU timings where supported, frame-time percentiles, and long frames. Desktop and emulator results do not prove phone performance.
 
 Initial distance hypothesis: 6–8 chunk horizontal radius on midrange hardware, using 16-block-wide chunks (96–128 blocks). These are tuning candidates, not promises. Report full-detail terrain separately from any distant simplified horizon.
 

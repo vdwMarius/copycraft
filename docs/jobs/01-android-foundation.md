@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-Read README.md and docs/ROADMAP.md. Obtain the creative director's engine decision before engine-specific implementation. Identify the minimum target phone; independent build/tooling work can continue while hardware details are pending.
+Read README.md and docs/ROADMAP.md. The creative director approved Godot 4 with a native voxel module. The primary validation phone is their Galaxy S26 Ultra with Snapdragon 8 Elite Gen 5 for Galaxy, 16 GB RAM, and 1 TB storage. Inspect actual device access; independent build/tooling work can continue without connected hardware. Do not claim a minimum supported phone tier from this high-end target alone.
 
 ## Deliverable
 
