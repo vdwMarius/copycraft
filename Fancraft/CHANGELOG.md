@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0: art direction from the reference images
+
+Target style is `docs/art-reference/03-target-style-scene.jpg`, with the rock and tree sheets as material references.
+- **Built-in textures redrawn in a cel-shaded painted style:**
+  - flat 2–3 tone bands per shape, warm top-left highlight edges and thin dark line work;
+  - lime grass with flower specks, and a hanging grass lip on block sides;
+  - chunky sandstone and grey cut-stone bricks, with moss spilling over mossy stone;
+  - warm dirt clods, reddish bark plates, turquoise water with white foam, clumped leaves.
+- **Cel-shaded block lighting:**
+  - soft lit and shade bands, crisp shadows, small toon highlights;
+  - a thin rim of light, and sunlight glowing through leaves.
+- **New trees:** rounded clump canopies sculpted at quarter-block resolution, in three shapes
+  (round broadleaf, tiered conifer, bush).
+- **Sky and colour:** brighter, more saturated palette, filmic tonemapping, bluer sky, lighter fog.
+
 ## 0.2.0: phone feedback fixes and the stylised look
 
 **Fixed**

@@ -4,11 +4,13 @@ Fancraft builds all block textures into two `Texture2DArray`s at runtime, so a p
 can use any square resolution from 16 px up to 2048 px and every block face tiles
 seamlessly. The built-in **Fancraft Default** pack is generated on your GPU at the
 resolution you choose in Settings (16–512 px), so it adds nothing to the APK size.
-Its style is crisp and hand-painted: bevelled shapes, deep crevices and painted light
-from the top-left of each tile. Fine grain scales with resolution, so 256 and 512 px
-show more detail rather than just upscaled noise. Pack authors who want a matching
-look should use strong, shape-driven height maps, because the block shader's parallax
-and cavity shading are driven by height.
+Its style follows the art reference in `docs/art-reference/` (03 is the target): bright
+cel-shaded tiles with flat tone bands, a light band on top-left edges and a cool shadow
+band on bottom-right edges, thin warm-dark outlines, and chunky chipped cut stone. The
+palette is lime grass with flower specks, warm sandstone, cool grey-brown stone, earthy
+dirt, reddish bark and turquoise water with white foam. Fine grain scales with
+resolution. Pack authors who want a matching look should use strong, shape-driven height
+maps, because the block shader's parallax and cavity shading are driven by height.
 
 ## Installing a pack
 

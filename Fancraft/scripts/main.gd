@@ -124,7 +124,7 @@ func _build_environment() -> void:
 	env.fog_depth_curve = 1.8
 	env.fog_sky_affect = 0.12
 	env.fog_height = 26.0
-	env.fog_height_density = 0.06
+	env.fog_height_density = 0.015
 	env.glow_enabled = true
 	env.glow_intensity = 0.6
 	env.glow_strength = 0.9
@@ -173,7 +173,7 @@ func _apply_setting(key: String) -> void:
 			env.glow_enabled = bool(v)
 		"render_distance":
 			var far := float(v) * 16.0
-			env.fog_depth_begin = far * 0.55
+			env.fog_depth_begin = far * 0.7
 			env.fog_depth_end = far * 0.98
 			player.camera.far = far + 48.0
 
